@@ -4,21 +4,23 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>오늘의 플래너</title>
+  <meta name="theme-color" content="#ece5d6" />
   <link rel="stylesheet" href="style.css" />
+  <script src="common.js"></script>
   <style>
     .wrap { max-width: 1240px; margin: 26px auto; padding: 0 18px; }
     .topnav { display: flex; gap: 8px; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
     .topnav .sp { flex: 1; }
     .sheet { padding: 30px 30px 30px 44px; }
     .head { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; border-bottom: 2px solid var(--ink); padding-bottom: 12px; margin-bottom: 22px; }
-    .head .date { font-family: 'Nanum Pen Script', cursive; font-size: 54px; line-height: .9; }
+    .head .date { font-family: var(--font-hand), 'Nanum Pen Script', cursive; font-size: calc(54px * var(--hand-scale)); line-height: .9; }
     .head .date small { font-size: 26px; color: var(--muted); margin-left: 8px; }
     .head .ddays { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
     .head .ddays .chip { font-size: 13px; padding: 3px 10px; }
-    .quote { font-family: 'Nanum Pen Script', cursive; font-size: 22px; color: var(--muted); margin: -10px 0 18px; }
+    .quote { font-family: var(--font-hand), 'Nanum Pen Script', cursive; font-size: calc(22px * var(--hand-scale)); color: var(--muted); margin: -10px 0 18px; }
 
     .cols { display: grid; grid-template-columns: 300px 1fr 290px; gap: 26px; }
-    .card { border: 1.5px solid var(--line); border-radius: 12px; padding: 16px; background: #fff; margin-bottom: 18px; position: relative; }
+    .card { border: 1.5px solid var(--line); border-radius: 12px; padding: 16px; background: var(--card); margin-bottom: 18px; position: relative; }
     .card h3 { margin: 0 0 10px; }
 
     /* 타임라인 */
@@ -27,11 +29,11 @@
     .tl .hr span { position: absolute; top: -8px; left: 0; background: var(--paper); padding-right: 4px; }
     .blk {
       position: absolute; left: 4px; right: 4px; border-radius: 6px; padding: 3px 7px; font-size: 12px; overflow: hidden;
-      line-height: 1.3; border-left: 4px solid var(--c); background: color-mix(in srgb, var(--c) 16%, #fff); cursor: pointer;
+      line-height: 1.3; border-left: 4px solid var(--c); background: color-mix(in srgb, var(--c) 18%, var(--card)); cursor: pointer;
     }
-    .blk.fixed { cursor: default; border-left-color: #b9ae99; color: #7d7466;
-      background: repeating-linear-gradient(-45deg, #f6f2ea 0 6px, #efe9dd 6px 12px); }
-    .blk.fixed.exam { border-left-color: var(--accent); color: var(--accent); background: repeating-linear-gradient(-45deg, #fdeee9 0 6px, #fae2da 6px 12px); font-weight: bold; }
+    .blk.fixed { cursor: default; border-left-color: var(--dash); color: var(--muted);
+      background: repeating-linear-gradient(-45deg, var(--soft) 0 6px, var(--track) 6px 12px); }
+    .blk.fixed.exam { border-left-color: var(--accent); color: var(--accent); background: repeating-linear-gradient(-45deg, var(--accent-soft) 0 6px, color-mix(in srgb, var(--accent-soft) 80%, var(--accent)) 6px 12px); font-weight: bold; }
     .blk.tiny { white-space: nowrap; text-overflow: ellipsis; padding-top: 1px; padding-bottom: 0; }
     .blk.half { right: 50%; } .blk.half2 { left: 50%; }
     .blk.done { opacity: .5; text-decoration: line-through; }
@@ -46,50 +48,50 @@
       display: flex; gap: 12px; align-items: flex-start; padding: 12px 4px; border-bottom: 1px solid var(--rule);
       transition: background .2s;
     }
-    .todo:hover { background: #fffaf0; }
+    .todo:hover { background: var(--hover); }
     .check { position: relative; flex: none; margin-top: 2px; cursor: pointer; }
     .check input { position: absolute; opacity: 0; width: 0; height: 0; }
-    .check .box { display: block; width: 24px; height: 24px; border: 2px solid var(--ink); border-radius: 5px; transform: rotate(-3deg); background: #fff; }
+    .check .box { display: block; width: 24px; height: 24px; border: 2px solid var(--ink); border-radius: 5px; transform: rotate(-3deg); background: var(--card); }
     .check input:checked + .box { background: var(--sage); border-color: var(--sage); }
-    .check input:checked + .box::after { content: '✓'; color: #fff; position: absolute; left: 5px; top: -2px; font-size: 20px; font-weight: bold; }
+    .check input:checked + .box::after { content: '✓'; color: var(--on-accent); position: absolute; left: 5px; top: -2px; font-size: 20px; font-weight: bold; }
     .check input:focus-visible + .box { outline: 2px solid var(--sky); outline-offset: 2px; }
     .tbody { flex: 1; min-width: 0; }
     .ttop { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 3px; flex-wrap: wrap; }
     .ttitle { font-size: 16px; }
     .todo.done .ttitle { text-decoration: line-through; text-decoration-color: var(--accent); text-decoration-thickness: 2px; color: var(--muted); }
-    .tnote { font-size: 13px; color: #6f675b; margin-top: 4px; background: #fff8e5; display: inline-block; padding: 2px 8px; border-radius: 4px; }
+    .tnote { font-size: 13px; color: var(--muted); margin-top: 4px; background: var(--note); display: inline-block; padding: 2px 8px; border-radius: 4px; }
     .tact { display: flex; gap: 2px; opacity: .25; transition: .15s; }
     .todo:hover .tact, .todo:focus-within .tact { opacity: 1; }
     .tact button { background: none; border: none; cursor: pointer; font-size: 14px; padding: 4px 6px; color: var(--muted); border-radius: 6px; }
-    .tact button:hover { background: #f3ede1; color: var(--ink); }
+    .tact button:hover { background: var(--soft); color: var(--ink); }
     .kind { font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
     .add-form { display: grid; grid-template-columns: 90px 90px 120px 1fr auto; gap: 8px; align-items: end; margin-top: 14px; }
     .empty-todo { text-align: center; padding: 30px 10px; color: var(--muted); }
 
     /* 진행률 도넛 */
     .donut { width: 120px; height: 120px; border-radius: 50%; margin: 4px auto 10px; display: grid; place-items: center;
-      background: conic-gradient(var(--sage) calc(var(--p) * 1%), #f1ebde 0); transition: .4s; }
-    .donut > div { width: 92px; height: 92px; border-radius: 50%; background: #fff; display: grid; place-items: center; text-align: center; }
-    .donut b { font-family: 'Nanum Pen Script', cursive; font-size: 38px; line-height: 1; display: block; }
+      background: conic-gradient(var(--sage) calc(var(--p) * 1%), var(--track) 0); transition: .4s; }
+    .donut > div { width: 92px; height: 92px; border-radius: 50%; background: var(--card); display: grid; place-items: center; text-align: center; }
+    .donut b { font-family: var(--font-hand), 'Nanum Pen Script', cursive; font-size: calc(38px * var(--hand-scale)); line-height: 1; display: block; }
     .donut small { font-size: 11px; color: var(--muted); }
     .kv { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
 
     /* 타이머 */
     .timer { text-align: center; }
-    .timer .t { font-family: 'Nanum Pen Script', cursive; font-size: 62px; line-height: 1; margin: 4px 0 6px; letter-spacing: 2px; }
+    .timer .t { font-family: var(--font-hand), 'Nanum Pen Script', cursive; font-size: calc(62px * var(--hand-scale)); line-height: 1; margin: 4px 0 6px; letter-spacing: 2px; }
     .timer .modes { display: flex; gap: 6px; justify-content: center; margin-bottom: 10px; }
     .timer .modes button.on { background: var(--butter); }
-    .timer .tbar { height: 6px; background: #f1ebde; border-radius: 99px; overflow: hidden; margin-bottom: 12px; }
+    .timer .tbar { height: 6px; background: var(--track); border-radius: 99px; overflow: hidden; margin-bottom: 12px; }
     .timer .tbar i { display: block; height: 100%; background: var(--accent); width: 0; transition: width 1s linear; }
     .timer select { margin-bottom: 10px; }
 
     /* 회고 */
     .moods { display: flex; gap: 4px; justify-content: space-between; margin-bottom: 8px; }
     .moods button { font-size: 24px; background: none; border: 2px solid transparent; border-radius: 50%; width: 42px; height: 42px; cursor: pointer; filter: grayscale(.8); opacity: .6; }
-    .moods button.on { border-color: var(--butter); filter: none; opacity: 1; background: #fff8e5; }
+    .moods button.on { border-color: var(--butter); filter: none; opacity: 1; background: var(--note); }
     textarea.lined {
       width: 100%; min-height: 132px; border: none; outline: none; resize: vertical; background: transparent;
-      font-family: 'Nanum Pen Script', cursive; font-size: 22px; line-height: 28px;
+      font-family: var(--font-hand), 'Nanum Pen Script', cursive; font-size: calc(22px * var(--hand-scale)); line-height: 28px;
       background-image: linear-gradient(transparent 27px, var(--rule) 27px); background-size: 100% 28px;
     }
 
@@ -100,12 +102,32 @@
       .add-form { grid-template-columns: 1fr 1fr; } .add-form .full { grid-column: 1 / -1; }
       .head .date { font-size: 42px; }
     }
+    /* ── 인쇄: 꼭 필요한 것만 (날짜·D-Day·할 일 체크표·메모 칸) ── */
+    #printSheet { display: none; }
     @media print {
-      body { background: #fff; }
-      .topnav, .no-print, .tact, .add-form, .timer-card, .rings, .tape { display: none !important; }
-      .wrap { margin: 0; max-width: none; }
-      .paper { box-shadow: none; }
-      .cols { grid-template-columns: 250px 1fr 220px; }
+      @page { size: A4; margin: 12mm; }
+      html, body { background: #fff !important; zoom: 1; }
+      body > :not(#printSheet) { display: none !important; }
+      #printSheet { display: block; color: #222; font-size: 10.5pt; line-height: 1.45; }
+      .ps-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; border-bottom: 2px solid #222; padding-bottom: 6px; margin-bottom: 8px; }
+      .ps-date { font-family: var(--font-hand), 'Nanum Pen Script', cursive; font-size: calc(32pt * var(--hand-scale)); line-height: 1; }
+      .ps-dd { font-size: 9.5pt; text-align: right; }
+      .ps-dd b { margin-left: 8px; }
+      .ps-meta { font-size: 9pt; color: #555; margin-bottom: 10px; }
+      table.ps { width: 100%; border-collapse: collapse; }
+      table.ps th { text-align: left; font-size: 8.5pt; color: #666; font-weight: normal; border-bottom: 1.2px solid #222; padding: 3px 4px; }
+      table.ps td { border-bottom: 1px solid #d5d5d5; padding: 6px 4px; vertical-align: top; }
+      table.ps tr { break-inside: avoid; }
+      .ps-box { display: inline-block; width: 13px; height: 13px; border: 1.5px solid #222; border-radius: 3px; position: relative; top: 2px; }
+      .ps-box.on::after { content: '✓'; position: absolute; left: 1px; top: -5px; font-size: 13px; font-weight: bold; }
+      .ps-time { white-space: nowrap; width: 88px; color: #444; }
+      .ps-sub { white-space: nowrap; width: 90px; border-left: 4px solid var(--c, #999); padding-left: 6px !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .ps-done td { color: #888; }
+      .ps-done .ps-title { text-decoration: line-through; }
+      .ps-note { display: block; font-size: 8.5pt; color: #666; }
+      .ps-memo { margin-top: 14px; border: 1px solid #bbb; border-radius: 6px; padding: 6px 10px 8px; break-inside: avoid; }
+      .ps-memo b { font-size: 9pt; }
+      .ps-lines { min-height: 84px; white-space: pre-wrap; background-image: linear-gradient(transparent 27px, #ddd 27px); background-size: 100% 28px; line-height: 28px; }
     }
   </style>
 </head>
@@ -117,8 +139,13 @@
       <a class="btn small" id="nextDay">내일 ›</a>
       <input type="date" class="btn small" id="jump" style="padding:3px 10px" aria-label="날짜 이동" />
       <span class="sp"></span>
+      <div style="position:relative">
+        <button class="btn small ghost" id="lookBtn" aria-expanded="false">🎨 테마</button>
+        <div class="look-pop" id="lookPop" hidden></div>
+      </div>
       <a class="btn small ghost" href="index.html" id="calLink">📅 달력으로</a>
-      <button class="btn small ghost" onclick="window.print()">🖨 인쇄</button>
+      <button class="btn small ghost" onclick="window.print()" title="할 일 목록만 한 장으로 인쇄">🖨 인쇄</button>
+      <button class="btn small ghost" id="plHelp" title="사용법">❓</button>
     </nav>
 
     <article class="paper sheet">
@@ -155,7 +182,7 @@
             <button class="btn small primary full">+ 추가</button>
           </form>
 
-          <div class="card no-print" style="margin-top:22px;background:#fbf8f1">
+          <div class="card no-print" style="margin-top:22px;background:var(--soft)">
             <b>계획이 밀렸나요?</b>
             <p class="muted" style="font-size:13px;margin:6px 0 10px">완료하지 못한 진도는 그대로 이어서, 내일부터 남은 시험까지 계획을 다시 짜 드려요. (완료한 일정·직접 추가한 일정은 그대로 유지)</p>
             <button class="btn small sage" id="replan">🔄 내일부터 계획 다시 짜기</button>
@@ -200,7 +227,9 @@
     </article>
   </div>
 
-  <script src="common.js"></script>
+  <!-- 인쇄 전용: 화면에는 안 보이고, 인쇄할 때만 이 시트 한 장이 출력됨 -->
+  <section id="printSheet" aria-hidden="true"></section>
+
   <script src="planner.js"></script>
 </body>
 </html>

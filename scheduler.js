@@ -35,7 +35,13 @@ const DEFAULT_SETTINGS = {
   maxWeekdayMin: 240,
   maxWeekendMin: 480,
   reviewSlot: true,  // 하루 마지막 블록을 복습으로
+  // 꾸미기 (화면 테마·글꼴)
+  theme: 'cream',
+  handFont: 'pen',
+  fontScale: 1,
 };
+const THEME_IDS = ['cream', 'cherry', 'mint', 'sky', 'lavender', 'lemon', 'night'];
+const FONT_IDS = ['pen', 'gaegu', 'gamja', 'melody', 'yeonsung', 'jua', 'dohyeon', 'batang'];
 
 const PALETTE = ['#e07a5f', '#81b29a', '#7fa7c9', '#f2b84b', '#b48ead', '#e8998d', '#6d9dc5', '#a3b86c', '#d4a373', '#9a8c98'];
 
@@ -77,6 +83,9 @@ function sanitizeSettings(input = {}) {
     maxWeekdayMin: num(input.maxWeekdayMin, d.maxWeekdayMin, 0, 900),
     maxWeekendMin: num(input.maxWeekendMin, d.maxWeekendMin, 0, 900),
     reviewSlot: input.reviewSlot === undefined ? d.reviewSlot : !!input.reviewSlot,
+    theme: THEME_IDS.includes(input.theme) ? input.theme : d.theme,
+    handFont: FONT_IDS.includes(input.handFont) ? input.handFont : d.handFont,
+    fontScale: [1, 1.1, 1.2].includes(Number(input.fontScale)) ? Number(input.fontScale) : d.fontScale,
   };
 }
 
@@ -165,7 +174,8 @@ function interleave(counts) {
   return res;
 }
 
-const splitUnits = (scope) => String(scope || '').split(/[,\n/·]+/).map((x) => x.trim()).filter(Boolean)
+// 범위 → 단원 목록. 항목이 ";"로 나뉘어 있으면 그 기준으로(자동 인식 결과), 아니면 쉼표 등으로
+const splitUnits = (scope) => String(scope || '').split(/;/.test(scope || '') ? /[;\n]+/ : /[,\n/·]+/).map((x) => x.trim()).filter(Boolean)
   .reduce((acc, u) => { if (acc.length && u.length < 5) acc[acc.length - 1] += `, ${u}`; else acc.push(u); return acc; }, []);
 
 /**

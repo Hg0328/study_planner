@@ -42,6 +42,30 @@ function render() {
   renderProgress();
   renderMemo();
   renderTimerTasks();
+  renderPrint();
+}
+
+// ───────── 인쇄용 시트 (할 일 체크표 한 장) ─────────
+function renderPrint() {
+  const upcoming = data.exams.filter((e) => e.date >= date);
+  const timed = data.tasks.filter((t) => t.start != null);
+  const planMin = timed.reduce((a, t) => a + t.end - t.start, 0);
+  const fixed = data.fixed.map((b) => `${b.label} ${toHM(b.start)}–${toHM(b.end)}`).join(' · ');
+  $('#printSheet').innerHTML = `
+    <div class="ps-head">
+      <div class="ps-date">${D.pretty(date)}</div>
+      <div class="ps-dd">${upcoming.slice(0, 6).map((e) => `<b>${esc(e.subject)} ${dday(D.diff(date, e.date))}</b>`).join('')}</div>
+    </div>
+    <div class="ps-meta">할 일 ${data.tasks.length}개 · 계획 공부 ${fmtMin(planMin)}${fixed ? ` · 고정 일정: ${esc(fixed)}` : ''}</div>
+    ${data.tasks.length ? `<table class="ps">
+      <thead><tr><th style="width:22px"></th><th>시간</th><th>과목</th><th>할 일</th></tr></thead>
+      <tbody>${data.tasks.map((t) => `<tr class="${t.done ? 'ps-done' : ''}">
+        <td><span class="ps-box ${t.done ? 'on' : ''}"></span></td>
+        <td class="ps-time">${t.start != null ? `${toHM(t.start)}–${toHM(t.end)}` : '자유'}</td>
+        <td class="ps-sub" style="--c:${t.color || (t.kind === 'review' ? '#b48ead' : '#9a8c98')}">${esc(t.subject || '기타')}</td>
+        <td><span class="ps-title">${esc(t.title)}</span>${t.note ? `<span class="ps-note">📝 ${esc(t.note)}</span>` : ''}</td>
+      </tr>`).join('')}</tbody></table>` : '<p>계획된 할 일이 없어요.</p>'}
+    <div class="ps-memo"><b>메모 · 회고 ${data.memo.mood || ''}</b><div class="ps-lines">${esc(data.memo.text || '')}</div></div>`;
 }
 
 // ───────── 타임테이블 ─────────
@@ -111,7 +135,7 @@ function renderTodos() {
         <button data-act="tomorrow" title="내일로 미루기">⏭</button>
         <button data-act="del" title="삭제">✕</button>
       </div></li>`;
-  }).join('') || `<li class="empty-todo"><div class="hand" style="font-size:28px">${data.tasks.length ? '모두 완료! 수고했어요 🎉' : '이 날은 계획된 공부가 없어요'}</div>
+  }).join('') || `<li class="empty-todo"><div class="hand" style="font-size:calc(28px * var(--hand-scale))">${data.tasks.length ? '모두 완료! 수고했어요 🎉' : '이 날은 계획된 공부가 없어요'}</div>
     ${data.tasks.length ? '' : '<p style="font-size:13px">달력 화면에서 「공부 계획 자동 생성」을 누르거나, 아래에서 직접 추가해 보세요.</p>'}</li>`;
 
   $('#addForm').exam_id.innerHTML = `<option value="">기타</option>` +
@@ -277,9 +301,34 @@ function beep() {
 }
 window.addEventListener('beforeunload', (e) => { if (timer.run) { e.preventDefault(); e.returnValue = ''; } });
 
+// ───────── 테마 ─────────
+$('#lookBtn').onclick = (e) => {
+  e.stopPropagation();
+  const pop = $('#lookPop');
+  pop.hidden = !pop.hidden;
+  $('#lookBtn').setAttribute('aria-expanded', String(!pop.hidden));
+  if (!pop.hidden) renderLookPicker(pop);
+};
+document.addEventListener('click', (e) => { const path = e.composedPath(); if (!path.includes($('#lookPop')) && !path.includes($('#lookBtn'))) $('#lookPop').hidden = true; });
+
 // ───────── 이동 & 동기화 ─────────
 $('#jump').addEventListener('change', (e) => { if (e.target.value) location.href = `planner.html?date=${e.target.value}`; });
 onChange(() => load());
 setInterval(() => { if (date === D.today()) renderTimeline(); }, 60000);
 
-load().then(drawTimer).catch((e) => toast(e.message));
+// ───────── 처음 사용 안내 (이 기기에서 플래너를 처음 열 때 한 번) ─────────
+function plannerTour() {
+  runTour([
+    { el: '#todos', title: '오늘 할 일 체크', text: '끝낸 일은 네모를 눌러 체크해요. 📝로 메모(예: p.45까지 함), ⏭로 내일로 미루기, ✕로 삭제할 수 있어요.' },
+    { el: '#timeline', title: '타임테이블', text: '학교·학원·식사 사이 빈 시간에 공부가 배치돼요. 빨간 선이 지금 시각이에요. 블록을 눌러도 체크돼요.' },
+    { el: '.timer-card', title: '집중 타이머', text: '25분·50분 집중 후 알림이 울려요. 집중한 시간은 기록돼서 달력 화면 통계에 쌓여요.' },
+    { el: '#replan', title: '밀렸을 때', text: '못 끝낸 진도는 이 버튼으로 <b>내일부터 남은 기간에 다시 분배</b>할 수 있어요.' },
+    { el: '#lookBtn', title: '테마 · 인쇄', text: '🎨 테마로 색과 글꼴을 바꾸고, 🖨 인쇄를 누르면 <b>할 일 체크표만 한 장</b>으로 깔끔하게 출력돼요.' },
+  ], { doneLabel: '알겠어요' });
+}
+$('#plHelp').onclick = plannerTour;
+
+load().then(() => {
+  drawTimer();
+  if (!localStorage.getItem('sp_tour_planner')) { localStorage.setItem('sp_tour_planner', '1'); plannerTour(); }
+}).catch((e) => toast(e.message));

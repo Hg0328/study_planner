@@ -95,8 +95,28 @@ function cleanScope(seg) {
 const LABEL_RE = /^(?:과\s*목|교\s*과)\s*명?\s*[:：\-–]\s*(.{1,30}?)\s*(?:[(\[].*)?$/;
 // 번호/기호 머리 ("1.", "가.", "①", "-", "•")
 const MARK_RE = /^\s*(?:\d{1,2}\s*[.)](?!\d)|[가-하]\s*[.)]|[①-⑳]|[-•▪◦*])\s*/;
+// 범위가 아닌 출제 팁·유의사항 ("출제 확률 높음", "변형합니다", "준비물" 등)
+const HINT_RE = /(출제\s*(확률|가능성|비중|비율|예정|경향|될\s*수)|확률\s*(이\s*)?높|자주\s*(나|출제)|참고\s*(만|하|바람)|변형\s*(해|하|합|함|됨)|유의\s*사항|주의\s*사항|준비물|지참|배점|문항\s*수|시험\s*시간|사인펜|수정\s*테이프)/;
 // 범위가 아닌 안내 문장 ("~합니다.", "~하세요")
 const NOTICE_RE = /(니다|세요|바랍니다|됩니다)[\s.!)]*$/;
+
+// 범위 항목을 짧고 읽기 좋게 정리
+//  "페이지: 처음~73페이지"                     → "처음~73페이지"
+//  "학습지: 2학기 학습지 전부"                  → "2학기 학습지 전부"
+//  "풀어야 할 문제: 44페이지 1번, 4번"           → "44페이지 1번, 4번"
+//  "처음~127페이지(단, 집어준 문제만 풀어도 됨)" → "처음~127페이지"
+const MATERIAL_RE = /(교과서|부교재|학습지|프린트|문제집|자습서|교재|활동지|유인물|필기|노트|모의고사|기출)/;
+function tidyItem(section, t) {
+  let v = t.replace(/\(\s*(단|다만|※|참고|예)(?=[\s,:])[^)]*\)?/g, '').replace(/\s{2,}/g, ' ').trim();
+  let label = '';
+  const m = v.match(/^([^:：]{1,30})[:：]\s*(.+)$/);
+  if (m) { label = m[1].trim(); v = m[2].trim(); }
+  v = v.replace(/\s*문제\s*$/, '').trim();
+  let head = section;
+  if (!head && label && MATERIAL_RE.test(label)) head = label.match(MATERIAL_RE)[0]; // "학습지: 1~5" → "학습지 1~5"
+  if (head && v.includes(head)) head = '';
+  return (head ? `${head} ${v}` : v).trim();
+}
 
 function parseScopeText(text, today) {
   const lines = String(text || '').replace(/\r/g, '').split('\n');
@@ -112,32 +132,33 @@ function parseScopeText(text, today) {
     let e = map.get(key);
     if (!e) { e = { subject: key, date: '', scope: '' }; map.set(key, e); order.push(key); }
     if (date && !e.date) e.date = date;
-    if (scope) e.scope = e.scope ? `${e.scope}, ${scope}` : scope;
+    if (scope) e.scope = e.scope ? `${e.scope}; ${scope}` : scope;
     return e;
   };
   // 범위 줄 하나를 정리 (번호 제거, 소제목 붙이기, 안내 문장 제외)
   let pending = ''; // 소제목 후보 ("1. 교과서") — 다음 줄이 "가." 항목이면 소제목, 아니면 그 자체가 범위
   const add = (t) => {
     if (!t) return;
-    if (last) last.scope = last.scope ? `${last.scope}, ${t}` : t;
+    if (last) last.scope = last.scope ? `${last.scope}; ${t}` : t;
     else loose.push(t);
   };
   const flush = () => { if (pending) { add(pending); pending = ''; } };
   const scopeLine = (line) => {
     if (NOTICE_RE.test(line) && line.length > 12) return;
+    if (HINT_RE.test(line)) return;
     const marked = MARK_RE.test(line);
     const isSub = /^\s*[가-하]\s*[.)]/.test(line);
     const t = cleanScope(line.replace(MARK_RE, ''));
     if (!t) return;
     if (isSub) {
       if (pending) { section = pending; pending = ''; }
-      add(section ? `${section} ${t}` : t);
+      add(tidyItem(section, t));
       return;
     }
     flush();
     section = '';
     if (marked && t.length <= 12 && !/[:：~\d]/.test(t)) pending = t;
-    else add(t);
+    else add(tidyItem('', t));
   };
 
   for (const rawLine of lines) {
@@ -186,7 +207,7 @@ function parseScopeText(text, today) {
   }
   flush();
   // 과목을 하나도 못 찾았지만 범위 내용은 있으면 → 과목 이름만 비운 채로 돌려줌 (화면에서 입력)
-  if (!order.length && loose.length) return [{ subject: '', date: curDate, scope: loose.join(', ').slice(0, 500) }];
+  if (!order.length && loose.length) return [{ subject: '', date: curDate, scope: loose.join('; ').slice(0, 500) }];
   return order.map((k) => ({ ...map.get(k), scope: map.get(k).scope.slice(0, 500) }));
 }
 

@@ -70,7 +70,7 @@ async function renderCalendar() {
   $('#cal').innerHTML = html;
 
   $('#emptyBox').innerHTML = exams.length ? '' : `<div class="empty">
-      <div class="hand" style="font-size:30px">아직 등록된 시험이 없어요</div>
+      <div class="hand" style="font-size:calc(30px * var(--hand-scale))">아직 등록된 시험이 없어요</div>
       <p>시험 과목과 날짜, 학교·학원 시간을 입력하면 공부 계획을 자동으로 만들어 드려요.</p>
       <button class="btn primary" onclick="openSettings()">📝 시험 등록하러 가기</button></div>`;
 }
@@ -85,7 +85,7 @@ async function renderSide() {
        <div class="n">${dday(D.diff(today, next.date))}</div>
        <div><span class="chip" style="--c:${next.color}">${esc(next.subject)}</span>
        <span class="muted" style="font-size:13px">${D.pretty(next.date)}</span></div>`
-    : `<div class="s">다가오는 시험</div><div class="hand" style="font-size:26px">시험을 등록해 주세요</div>`;
+    : `<div class="s">다가오는 시험</div><div class="hand" style="font-size:calc(26px * var(--hand-scale))">시험을 등록해 주세요</div>`;
 
   $('#dlist').innerHTML = exams.map((e) => {
     const n = D.diff(today, e.date);
@@ -133,6 +133,7 @@ $('#btnGenerate').onclick = generate;
 $$('#tabs button').forEach((b) => (b.onclick = () => {
   $$('#tabs button').forEach((x) => x.classList.toggle('on', x === b));
   $$('.tab-pane').forEach((p) => p.classList.toggle('on', p.dataset.pane === b.dataset.tab));
+  if (b.dataset.tab === 'look') renderLookPicker($('#lookPicker'));
 }));
 
 async function openSettings() {
@@ -213,11 +214,11 @@ function readSettings() {
   s.reviewSlot = $('#reviewSlot').checked;
   readAcademies();
 }
-$('#setOv').addEventListener('input', (e) => { if (!e.target.closest('#examForm')) dirty = true; });
+$('#setOv').addEventListener('input', (e) => { if (!e.target.closest('#examForm') && !e.target.closest('[data-pane=look]') && !e.target.closest('.quick')) dirty = true; });
 $('#setSave').onclick = async () => {
   readSettings();
   try {
-    settings = await api('/settings', { method: 'PUT', body: settings });
+    settings = await api('/settings', { method: 'PUT', body: { ...settings, ...Look.get() } });
     dirty = true;
     await closeSettings();
   } catch (e) { toast(e.message); }
@@ -461,6 +462,7 @@ $('#qStatus').addEventListener('click', async (e) => {
 // ───────── 시작 ─────────
 async function boot(isNew) {
   $('#app').hidden = false;
+  api('/settings').then((s) => Look.fromSettings(s)).catch(() => {});
   api('/config').then((c) => {
     cfg = c;
     $('#aiBadge').textContent = c.ai ? 'AI 인식' : '무료 자동 인식';
@@ -468,8 +470,22 @@ async function boot(isNew) {
   $('#uname').textContent = Auth.user;
   $('#todayLink').href = `planner.html?date=${D.today()}`;
   await refresh();
-  if (isNew) openSettings();
+  if (isNew) startTour(true);
 }
+
+// ───────── 처음 사용 안내 ─────────
+function startTour(isNew = false) {
+  runTour([
+    { el: null, title: '반가워요! 👋', text: '시험 날짜와 학교·학원 시간만 넣으면 <b>시험 공부 계획을 자동으로</b> 짜 주는 플래너예요. 사용법을 1분 안에 알려 드릴게요.' },
+    { el: '#btnSettings', title: '① 시험·시간표 입력', text: '여기서 <b>시험 과목·날짜</b>와 <b>학교·학원 시간</b>, 기상·취침 시간을 넣어요.<br>시험 범위는 공지 <b>사진·캡처를 올리거나 글을 붙여넣으면</b> 과목별로 자동 정리돼요.' },
+    { el: '#btnGenerate', title: '② 계획 자동 생성', text: '빈 시간에 맞춰 <b>개념 → 문제 → 총정리</b> 순서로 공부 계획을 만들어요. 시험이 가깝고 어려운 과목에 시간을 더 줘요.<br>설정을 바꾸면 창을 닫을 때 알아서 다시 짜요.' },
+    { el: '#cal', title: '③ 달력에서 날짜 누르기', text: '날짜를 누르면 <b>그날의 플래너가 새 창</b>으로 열려요. 할 일을 체크하면 이 달력에도 바로 반영되고, 다 끝낸 날엔 도장이 찍혀요.' },
+    { el: '#bigDday', title: '④ D-Day와 진행률', text: '가장 가까운 시험까지 남은 날, 과목별로 얼마나 공부했는지, 며칠 연속 공부했는지 여기서 볼 수 있어요.' },
+    { el: '#btnSettings', title: '⑤ 내 맘대로 꾸미기', text: '설정 창의 <b>🎨 꾸미기</b> 탭에서 색 테마(벚꽃·민트·밤 등), 큰 글씨 글꼴, 화면 크기를 바꿀 수 있어요.' },
+    { el: '#btnHelp', title: '언제든 다시 보기', text: '사용법이 궁금하면 이 버튼을 눌러 주세요. 이제 시험부터 등록해 볼까요?' },
+  ], { doneLabel: isNew ? '시험 등록하러 가기 →' : '완료', onDone: () => { if (isNew) openSettings(); } });
+}
+$('#btnHelp').onclick = () => startTour(exams.length === 0);
 onChange(() => refresh());
 document.addEventListener('visibilitychange', () => { if (!document.hidden && Auth.token) refresh(); });
 
