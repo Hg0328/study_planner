@@ -84,6 +84,10 @@
     .timer .tbar { height: 6px; background: var(--track); border-radius: 99px; overflow: hidden; margin-bottom: 12px; }
     .timer .tbar i { display: block; height: 100%; background: var(--accent); width: 0; transition: width 1s linear; }
     .timer select { margin-bottom: 10px; }
+    .noise-box { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); text-align: left; }
+    .noise-row { display: flex; gap: 6px; align-items: center; }
+    .noise-row select { margin: 0; flex: 1; font-size: 13px; }
+    #noiseVol { width: 100%; accent-color: var(--accent); margin: 8px 0 4px; }
 
     /* 회고 */
     .moods { display: flex; gap: 4px; justify-content: space-between; margin-bottom: 8px; }
@@ -212,6 +216,21 @@
             <div class="tbar"><i id="tBar"></i></div>
             <button class="btn primary small" id="tStart">▶ 시작</button>
             <button class="btn small" id="tReset">↺ 초기화</button>
+            <div class="noise-box">
+              <div class="noise-row">
+                <span>🎧</span>
+                <select class="input" id="noiseType" aria-label="백색소음 종류">
+                  <option value="off">백색소음 끄기</option>
+                  <option value="white">화이트 (쏴아)</option>
+                  <option value="pink">핑크 (부드럽게)</option>
+                  <option value="brown">브라운 (낮고 묵직)</option>
+                  <option value="rain">빗소리</option>
+                </select>
+                <button class="btn small ghost" id="noiseTest" type="button">▶ 들어보기</button>
+              </div>
+              <input type="range" id="noiseVol" min="0" max="1" step="0.05" aria-label="음량" />
+              <div class="muted" style="font-size:11px">골라 두면 타이머를 시작할 때 자동으로 켜지고, 멈추면 꺼져요</div>
+            </div>
           </div>
 
           <div class="card">
@@ -231,6 +250,7 @@
   <!-- 인쇄 전용: 화면에는 안 보이고, 인쇄할 때만 이 시트 한 장이 출력됨 -->
   <section id="printSheet" aria-hidden="true"></section>
 
+  <script src="noise.js"></script>
   <script src="planner.js"></script>
 </body>
 </html>

@@ -262,28 +262,44 @@ function drawTimer() {
 }
 // 공부 마라톤에 "공부 중/휴식" 상태 알리기 (친구 화면에서 내 캐릭터가 달리거나 쉼)
 const presence = (st, min) => api('/presence', { method: 'POST', body: { state: st, minutes: min } }).catch(() => {});
+// 지금까지 공부한 분 중 아직 기록 안 한 만큼 기록 (일시정지·초기화 때)
+async function creditElapsed() {
+  if (timer.isBreak) return;
+  const m = Math.floor((timer.total - timer.left) / 60) - (timer.credited || 0);
+  if (m < 1) return;
+  timer.credited = (timer.credited || 0) + m;
+  try {
+    const r = await api('/focus/' + date, { method: 'POST', body: { minutes: m } });
+    data.memo.focus_min = r.focus_min; renderProgress(); notifyChange();
+  } catch {}
+}
 function setMode(min) {
-  if (timer.run) presence('rest');
+  if (timer.run) { presence('rest'); creditElapsed(); Noise.stop(); }
   clearInterval(timer.iv); timer.run = false;
-  timer.total = timer.left = min * 60; timer.isBreak = min <= 10;
+  timer.total = timer.left = min * 60; timer.isBreak = min <= 10; timer.credited = 0;
   drawTimer();
 }
 $('#modes').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setMode(+b.dataset.m); });
 $('#tReset').onclick = () => setMode(timer.total / 60);
 $('#tStart').onclick = () => {
-  if (timer.run) { clearInterval(timer.iv); timer.run = false; drawTimer(); presence('rest'); return; }
+  if (timer.run) { clearInterval(timer.iv); timer.run = false; drawTimer(); presence('rest'); creditElapsed(); Noise.stop(); return; }
   timer.run = true;
   const endAt = Date.now() + timer.left * 1000;
   presence(timer.isBreak ? 'rest' : 'study', Math.ceil(timer.left / 60));
+  if (!timer.isBreak) Noise.play(); // 집중 시간에만 백색소음
   timer.iv = setInterval(async () => {
     timer.left = Math.max(0, Math.round((endAt - Date.now()) / 1000));
     drawTimer();
     if (timer.left === 0) {
       clearInterval(timer.iv); timer.run = false; beep();
       presence('rest');
+      Noise.stop();
       if (!timer.isBreak) {
-        const r = await api('/focus/' + date, { method: 'POST', body: { minutes: timer.total / 60 } });
-        data.memo.focus_min = r.focus_min; renderProgress();
+        const rest = timer.total / 60 - (timer.credited || 0); // 일시정지 때 이미 기록한 만큼은 빼고
+        if (rest > 0) {
+          const r = await api('/focus/' + date, { method: 'POST', body: { minutes: rest } });
+          data.memo.focus_min = r.focus_min; renderProgress();
+        }
         const tid = +$('#timerTask').value;
         toast(tid ? '⏰ 집중 완료! 할 일을 끝냈다면 체크해 주세요' : '⏰ 집중 완료! 5분 쉬어가요', 3500);
         notifyChange();
@@ -305,6 +321,7 @@ function beep() {
   } catch {}
 }
 window.addEventListener('beforeunload', (e) => { if (timer.run) { e.preventDefault(); e.returnValue = ''; } });
+bindNoiseUI({ select: $('#noiseType'), vol: $('#noiseVol'), test: $('#noiseTest'), isRunning: () => timer.run && !timer.isBreak });
 
 // ───────── 테마 ─────────
 $('#lookBtn').onclick = (e) => {

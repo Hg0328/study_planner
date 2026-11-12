@@ -515,6 +515,7 @@ app.get('/api/rooms/:code', auth, h(async (req, res) => {
         // run: 공부 중 · drink: 잠깐 휴식(20분 미만) · sleep: 오래 쉬는 중
         status: running ? 'run' : restMin !== null && restMin < 20 ? 'drink' : 'sleep',
         runLeftMin: running ? Math.ceil((m.until - now) / 60e3) : 0,
+        runElapsedMin: running ? Math.round(((now - m.since) / 60e3) * 100) / 100 : 0, // 화면에서 실시간으로 앞으로 나아가게
       };
     }),
   });

@@ -18,8 +18,8 @@ function pxToast(msg, ms = 2400) {
   clearTimeout(t._t); t._t = setTimeout(() => (t.style.display = 'none'), ms);
 }
 const fireLevel = (m) => (m >= 240 ? 3 : m >= 120 ? 2 : m >= 60 ? 1 : 0);
-const fmt = (m) => (m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`);
-const shortFmt = (m) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
+const fmt = (x) => { const m = Math.floor(x); return m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`; };
+const shortFmt = (x) => { const m = Math.floor(x); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
 
 // ───────── 로비 ─────────
 async function showLobby() {
@@ -69,6 +69,7 @@ async function enterRoom(code) {
 async function poll() {
   try {
     state = await api(`/rooms/${roomCode}?today=${D.today()}`);
+    fetchedAt = performance.now();
   } catch (err) { pxToast(err.message); return; }
   const r = state.room;
   document.title = `${r.name} · 공부 마라톤`;
@@ -87,12 +88,17 @@ async function poll() {
   sizeTrack();
 }
 
-const metric = (m) => (view === 'today' ? m.todayMin : m.totalMin);
+// 달리는 중이면 지금 이 순간까지 공부한 시간을 더해서 → 캐릭터가 실시간으로 조금씩 앞으로 나아감
+let fetchedAt = 0;
+const liveRun = (m) => (m.status === 'run'
+  ? Math.min(m.runElapsedMin + (performance.now() - fetchedAt) / 60e3, m.runElapsedMin + m.runLeftMin) : 0);
+const liveToday = (m) => m.todayMin + liveRun(m);
+const metric = (m) => (view === 'today' ? m.todayMin : m.totalMin) + liveRun(m);
 function target(m) {
   if (!state) return 0;
-  if (view === 'today') return Math.min(1, m.todayMin / state.room.goalMin);
-  const top = Math.max(...state.members.map((x) => x.totalMin), state.room.goalMin);
-  return Math.min(1, m.totalMin / (top * 1.04));
+  if (view === 'today') return Math.min(1, metric(m) / state.room.goalMin);
+  const top = Math.max(...state.members.map(metric), state.room.goalMin);
+  return Math.min(1, metric(m) / (top * 1.04));
 }
 
 const STATUS = { run: '🏃 달리는 중', drink: '💧 물 마시는 중', sleep: '💤 누워서 자는 중' };
@@ -104,14 +110,14 @@ function renderRank() {
       <canvas width="56" height="64" data-av="${m.id}"></canvas>
       <span><b>${esc(m.username)}</b>${m.id === state.me ? ' <span class="muted">(1P)</span>' : ''}<br>
         <span class="st ${m.status}">${STATUS[m.status]}${m.status === 'run' ? ` · ${m.runLeftMin}분 남음` : ''}</span></span>
-      <span class="min">${shortFmt(metric(m))}<small>${'🔥'.repeat(fireLevel(m.todayMin))}</small></span></li>`).join('');
+      <span class="min">${shortFmt(metric(m))}<small>${'🔥'.repeat(fireLevel(liveToday(m)))}</small></span></li>`).join('');
   for (const c of $$('#rank canvas')) {
     const m = state.members.find((x) => x.id === +c.dataset.av);
     const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
-    Pixel.draw(g, m.avatar, m.status === 'sleep' ? 'sleep' : 'stand', 0, 12, 8 + (m.status === 'sleep' ? 6 : 0), 2, fireLevel(m.todayMin));
+    Pixel.draw(g, m.avatar, m.status === 'sleep' ? 'sleep' : 'stand', 0, 12, 8 + (m.status === 'sleep' ? 6 : 0), 2, fireLevel(liveToday(m)));
   }
   const me = state.members.find((x) => x.id === state.me);
-  if (me) $('#hudToday').textContent = shortFmt(me.todayMin);
+  if (me) $('#hudToday').textContent = shortFmt(liveToday(me));
 }
 
 $$('.tabs button').forEach((b) => (b.onclick = () => {
@@ -228,7 +234,7 @@ function drawTrack(t) {
   state.members.forEach((m, i) => {
     const goal = target(m);
     const cur = shown.has(m.id) ? shown.get(m.id) : 0;
-    const p = cur + (goal - cur) * 0.06;
+    const p = Math.abs(goal - cur) < 0.004 ? goal : cur + (goal - cur) * 0.06;
     shown.set(m.id, Math.abs(goal - p) < 0.0005 ? goal : p);
     const y0 = i * laneH, gy = y0 + laneH - groundH;
     const x = Math.round(startX + p * (finishX - startX - 16 * S));
@@ -238,7 +244,7 @@ function drawTrack(t) {
     if (pose === 'run' && frame % 2 === 0) { px(x - 3 * S, gy - 2 * S, 2 * S, S, '#fff'); px(x - 6 * S, gy - 3 * S, S, S, '#fff'); }
     // 그림자
     px(x + 3 * S, gy - S, 10 * S, S, 'rgba(0,0,0,.25)');
-    Pixel.draw(ctx, m.avatar, pose, frame, x, oy, S, pose === 'sleep' ? 0 : fireLevel(m.todayMin));
+    Pixel.draw(ctx, m.avatar, pose, frame, x, oy, S, pose === 'sleep' ? 0 : fireLevel(liveToday(m)));
     // 완주 반짝이
     if (goal >= 1 && view === 'today') {
       const tw = Math.floor(t / 200) % 4;
@@ -270,6 +276,7 @@ function drawT() {
 $$('[data-min]').forEach((b) => (b.onclick = () => { T.total = T.left = +b.dataset.min * 60; drawT(); }));
 $('#tStart').onclick = async () => {
   T.run = true;
+  if (Noise.type !== 'off') Noise.play();
   const endAt = Date.now() + T.left * 1000;
   api('/presence', { method: 'POST', body: { state: 'study', minutes: Math.ceil(T.left / 60) } }).then(poll).catch(() => {});
   T.iv = setInterval(async () => {
@@ -277,6 +284,7 @@ $('#tStart').onclick = async () => {
     drawT();
     if (T.left === 0) {
       clearInterval(T.iv); T.run = false;
+      Noise.stop();
       beep();
       try {
         await api('/focus/' + D.today(), { method: 'POST', body: { minutes: T.total / 60 } });
@@ -289,8 +297,14 @@ $('#tStart').onclick = async () => {
   drawT();
 };
 $('#tStop').onclick = async () => {
+  if (!T.run) return;
+  const doneMin = Math.floor((T.total - T.left) / 60); // 중간에 멈춰도 공부한 만큼은 기록
   clearInterval(T.iv); T.run = false; T.left = T.total; drawT();
-  await api('/presence', { method: 'POST', body: { state: 'rest' } }).catch(() => {});
+  Noise.stop();
+  try {
+    await api('/presence', { method: 'POST', body: { state: 'rest' } });
+    if (doneMin >= 1) { await api('/focus/' + D.today(), { method: 'POST', body: { minutes: doneMin } }); pxToast(`${doneMin}분 기록했어요. 잠깐 쉬어 가요!`); }
+  } catch {}
   poll();
 };
 window.addEventListener('beforeunload', (e) => { if (T.run) { e.preventDefault(); e.returnValue = ''; } });
@@ -306,6 +320,9 @@ function beep() {
     });
   } catch {}
 }
+
+// ───────── 백색소음 (noise.js) — 달리는 동안 재생 ─────────
+bindNoiseUI({ select: $('#noiseType'), vol: $('#noiseVol'), test: $('#noiseTest'), isRunning: () => T.run });
 
 // ───────── 캐릭터 꾸미기 ─────────
 const HAIR_COLORS = ['#2b1d16', '#3b2a20', '#6b4423', '#a0522d', '#d4a15a', '#f2d16b', '#c0392b', '#ff8fb1', '#8e44ad', '#2e86c1', '#e8e8e8'];

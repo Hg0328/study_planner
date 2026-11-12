@@ -116,18 +116,15 @@ $('#prevM').onclick = () => { view.m--; if (view.m < 0) { view.m = 11; view.y--;
 $('#nextM').onclick = () => { view.m++; if (view.m > 11) { view.m = 0; view.y++; } renderCalendar(); };
 $('#thisM').onclick = () => { const d = new Date(); view = { y: d.getFullYear(), m: d.getMonth() }; renderCalendar(); };
 
+// 설정 창을 닫을 때 바뀐 내용이 있으면 자동으로 계획을 다시 짬
 async function generate() {
-  const btn = $('#btnGenerate');
-  btn.disabled = true;
   try {
     const r = await api('/generate', { method: 'POST', body: { startDate: D.today() } });
     toast(`✨ ${D.pretty(r.from)} ~ ${D.pretty(r.to)} · 총 ${fmtMin(r.studyMin)} 계획 완성!`, 3200);
     await refresh();
     notifyChange();
   } catch (e) { toast(e.message); }
-  finally { btn.disabled = false; }
 }
-$('#btnGenerate').onclick = generate;
 
 // ───────── 설정 모달 ─────────
 $$('#tabs button').forEach((b) => (b.onclick = () => {
@@ -481,12 +478,11 @@ async function boot(isNew) {
 function startTour(isNew = false) {
   runTour([
     { el: null, title: '반가워요! 👋', text: '시험 날짜와 학교·학원 시간만 넣으면 <b>시험 공부 계획을 자동으로</b> 짜 주는 플래너예요. 사용법을 1분 안에 알려 드릴게요.' },
-    { el: '#btnSettings', title: '① 시험·시간표 입력', text: '여기서 <b>시험 과목·날짜</b>와 <b>학교·학원 시간</b>, 기상·취침 시간을 넣어요.<br>시험 범위는 공지 <b>사진·캡처를 올리거나 글을 붙여넣으면</b> 과목별로 자동 정리돼요.' },
-    { el: '#btnGenerate', title: '② 계획 자동 생성', text: '빈 시간에 맞춰 <b>개념 → 문제 → 총정리</b> 순서로 공부 계획을 만들어요. 시험이 가깝고 어려운 과목에 시간을 더 줘요.<br>설정을 바꾸면 창을 닫을 때 알아서 다시 짜요.' },
-    { el: '#cal', title: '③ 달력에서 날짜 누르기', text: '날짜를 누르면 <b>그날의 플래너가 새 창</b>으로 열려요. 할 일을 체크하면 이 달력에도 바로 반영되고, 다 끝낸 날엔 도장이 찍혀요.' },
-    { el: '#bigDday', title: '④ D-Day와 진행률', text: '가장 가까운 시험까지 남은 날, 과목별로 얼마나 공부했는지, 며칠 연속 공부했는지 여기서 볼 수 있어요.' },
-    { el: '#raceLink', title: '⑤ 친구와 공부 마라톤', text: '방을 만들고 <b>입장 코드</b>를 친구에게 알려 주면 같이 달릴 수 있어요. 공부한 만큼 내 픽셀 캐릭터가 앞으로 달리고, 많이 할수록 머리에 불이 붙어요 🔥' },
-    { el: '#btnSettings', title: '⑥ 내 맘대로 꾸미기', text: '설정 창의 <b>🎨 꾸미기</b> 탭에서 색 테마(벚꽃·민트·밤 등), 큰 글씨 글꼴, 화면 크기를 바꿀 수 있어요.' },
+    { el: '#btnSettings', title: '① 시험·시간표 입력', text: '여기서 <b>시험 과목·날짜</b>와 <b>학교·학원 시간</b>, 기상·취침 시간을 넣어요. 창을 닫으면 <b>공부 계획이 자동으로</b> 만들어져요.<br>시험 범위는 공지 <b>사진·캡처를 올리거나 글을 붙여넣으면</b> 과목별로 자동 정리돼요.' },
+    { el: '#cal', title: '② 달력에서 날짜 누르기', text: '날짜를 누르면 <b>그날의 플래너가 새 창</b>으로 열려요. 할 일을 체크하면 이 달력에도 바로 반영되고, 다 끝낸 날엔 도장이 찍혀요.' },
+    { el: '#bigDday', title: '③ D-Day와 진행률', text: '가장 가까운 시험까지 남은 날, 과목별로 얼마나 공부했는지, 며칠 연속 공부했는지 여기서 볼 수 있어요.' },
+    { el: '#raceLink', title: '④ 친구와 공부 마라톤', text: '방을 만들고 <b>입장 코드</b>를 친구에게 알려 주면 같이 달릴 수 있어요. 공부한 만큼 내 픽셀 캐릭터가 앞으로 달리고, 많이 할수록 머리에 불이 붙어요 🔥' },
+    { el: '#btnSettings', title: '⑤ 내 맘대로 꾸미기', text: '설정 창의 <b>🎨 꾸미기</b> 탭에서 색 테마(벚꽃·민트·밤 등), 큰 글씨 글꼴, 화면 크기를 바꿀 수 있어요.' },
     { el: '#btnHelp', title: '언제든 다시 보기', text: '사용법이 궁금하면 이 버튼을 눌러 주세요. 이제 시험부터 등록해 볼까요?' },
   ], { doneLabel: isNew ? '시험 등록하러 가기 →' : '완료', onDone: () => { if (isNew) openSettings(); } });
 }
