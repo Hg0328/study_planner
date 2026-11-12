@@ -1,0 +1,155 @@
+# 📒 시험 공부 플래너 (Exam Study Planner)
+
+시험 날짜, 학교 시간, 학원 시간만 입력하면 **시험 기간 공부 계획을 자동으로 짜 주는** 웹 플래너입니다.
+
+- **화면**: HTML + CSS + 바닐라 JS (`public/`)
+- **백엔드**: Node.js + Express (`server.js`)
+- **DB**: SQLite — 내 컴퓨터에서는 `data/planner.db` 파일(Node.js 내장 `node:sqlite`), 배포하면 **Turso**(무료 클라우드 SQLite)
+
+---
+
+## 주요 기능
+
+| 화면 | 기능 |
+|---|---|
+| 첫 화면 (캘린더) | 월간 달력, 시험일 스티커, 날짜별 과목 표시·달성률 바, 100% 완료 도장, 기분 이모지 |
+| | D-Day 목록, 과목별 진행률(완료 시간 / 계획 시간), 전체 달성률, 연속 공부 일수, 타이머 누적 시간 |
+| | 날짜 칸이 `<a href="planner.html?date=…" target="_blank">`로 되어 있어 **누르면 새 창에서 그날 플래너가 열림** |
+| 로그인 | 사이트를 새로 열 때마다(주소 입력·즐겨찾기·새 탭) 로그인. 같은 탭 새로고침이나 달력에서 연 플래너 창은 로그인 유지. 토큰은 12시간 후 만료 |
+| 시험 범위 빠른 입력 | 시험 범위 **사진·캡처를 올리거나 Ctrl+V** → 과목·날짜·범위 자동 인식 → 표에서 확인·수정 후 한 번에 추가 (이미 있는 과목은 업데이트) |
+| | 가정통신문·단톡방 공지 **글을 붙여넣어도** 자동으로 과목별로 나눠 줌 |
+| 설정 | 시험 과목(날짜·난이도·범위·색상), 요일별 학교 시간, 시험 당일 학교 시간, 학원(요일·시간), 기상/취침, 식사, 공부 블록 길이, 하루 최대 공부량 |
+| 하루 플래너 (새 창) | 타임테이블(학교·학원·식사 + 공부 블록, 현재 시각 빨간 선), 할 일 체크리스트, 메모, 내일로 미루기, 직접 추가 |
+| | 달성률 도넛, 뽀모도로 집중 타이머(25/50분, 끝나면 알림음·시간 기록), 오늘의 회고 + 기분 스티커(자동 저장), 인쇄 |
+| | 「내일부터 계획 다시 짜기」: 밀린 진도를 이어서 남은 기간에 다시 분배 |
+| 동기화 | 플래너 창에서 체크하면 열려 있는 캘린더 창에 바로 반영 (BroadcastChannel) |
+
+## 계획 자동 생성 방식
+
+1. 하루마다 기상~취침 시간에서 **학교·학원·식사 시간과 이동 시간(전후 30분)**을 빼서 빈 시간을 계산
+2. 빈 시간을 **공부 블록(기본 50분 + 쉬는 10분)**으로 나누고, 하루 최대 공부량을 넘지 않게 제한
+3. 과목별 가중치 = `난이도 ÷ √(시험까지 남은 일수)` → 시험이 가깝고 어려운 과목일수록 블록을 더 많이 배정 (D-1은 ×4, D-2는 ×1.6)
+4. 같은 과목이 연달아 나오지 않게 번갈아 배치
+5. 과목별 진도에 따라 **[개념] → [문제] → [총정리]** 단계로 나누고, 시험 범위의 단원을 단계마다 고르게 분배
+6. 시험 전날에는 실전 모의 풀이·오답 점검, 시험 당일에는 최종 점검, 매일 마지막 블록은 복습 & 오답노트
+7. 다시 생성해도 **완료한 일정과 직접 추가한 일정은 그대로 유지**되고, 완료한 블록 수만큼 진도가 이어짐
+
+---
+
+## 시험 범위 사진 인식 방식
+
+| 방식 | 조건 | 특징 |
+|---|---|---|
+| **무료 자동 인식** (기본) | 설정 없음 | 브라우저에서 Tesseract.js로 사진의 글자를 읽고, 서버의 규칙 분석기(`scopeParser.js`)가 과목·날짜·범위를 찾음. 깔끔한 표·공지에 적합. 처음 한 번은 한글 인식 데이터를 받느라 1분 정도 걸릴 수 있음 |
+| **AI 인식** (선택) | `ANTHROPIC_API_KEY` 환경 변수 설정 | Claude가 사진을 직접 읽어 정리. 복잡한 표·손글씨·사진 촬영본도 정확도가 훨씬 높음. API 사용 요금이 발생하므로 1인당 하루 횟수 제한(`AI_DAILY_LIMIT`, 기본 20회). 한도를 넘거나 실패하면 무료 인식으로 자동 전환 |
+
+API 키는 https://console.anthropic.com 에서 발급받을 수 있어요. **키는 절대 코드나 GitHub에 올리지 말고 환경 변수로만 넣으세요.**
+
+## 로컬에서 실행
+
+```bash
+npm install
+npm start
+# → http://localhost:3000
+```
+
+Node.js 22.13 이상(권장: 최신 LTS)이 필요합니다. 설정값은 `.env.example`을 복사해 `.env`로 만들어 넣을 수 있어요.
+
+## 환경 변수
+
+| 이름 | 설명 | 기본값 |
+|---|---|---|
+| `PORT` | 서버 포트 | `3000` |
+| `TURSO_DATABASE_URL` | (배포용) Turso DB 주소. 있으면 Turso에 저장 | 없음 → 파일 저장 |
+| `TURSO_AUTH_TOKEN` | (배포용) Turso 토큰 | |
+| `DB_PATH` | 로컬 SQLite 파일 경로 | `./data/planner.db` |
+| `JWT_SECRET` | 로그인 토큰 서명 키 (배포 시 꼭 설정) | 없으면 자동으로 만들어 DB에 저장 |
+| `ANTHROPIC_API_KEY` | (선택) 사진 AI 인식용 Claude API 키 | 없으면 무료 인식 사용 |
+| `ANTHROPIC_MODEL` | (선택) 사용할 모델 | `claude-sonnet-5-5` |
+| `AI_DAILY_LIMIT` | (선택) 1인당 하루 AI 인식 횟수 | `20` |
+
+**로컬에서 AI 인식 켜기 (Windows cmd):** `set ANTHROPIC_API_KEY=발급받은키` 입력 후 같은 창에서 `npm start`
+
+---
+
+## 배포 방법 (무료: Render + Turso)
+
+| 역할 | 서비스 | 무료 조건 |
+|---|---|---|
+| 사이트 서버 | **Render** Free Web Service | 15분 동안 접속이 없으면 잠들고, 다음 접속 때 깨어나는 데 약 1분 |
+| 데이터 저장 | **Turso** Free | 기간 제한 없음, 5GB, 카드 등록 불필요 |
+
+Render 무료 서버는 재시작할 때 파일이 지워지므로, 데이터는 Turso에 저장합니다.
+(`TURSO_DATABASE_URL` 환경 변수가 있으면 자동으로 Turso 사용)
+
+### 1) GitHub에 코드 올리기
+1. https://github.com 가입 → 오른쪽 위 **+ → New repository** → 이름 `study-planner` → **Create repository**
+2. 만든 저장소 화면에서 **uploading an existing file** 클릭
+3. 압축을 푼 폴더 안의 파일·폴더를 전부 끌어다 놓기 (**`node_modules`, `data` 폴더, `.env` 파일은 올리지 않기**)
+4. 아래 **Commit changes** 클릭
+
+### 2) Turso 데이터베이스 만들기
+1. https://turso.tech 가입 (GitHub 계정으로 로그인 가능)
+2. 대시보드에서 **Create Database** → 이름 `study-planner` → 지역은 **Tokyo**(한국에서 가장 가까움)
+3. 만든 DB 화면에서 두 값을 복사해 메모장에 저장
+   - **Database URL**: `libsql://study-planner-아이디.turso.io` 형태
+   - **Create Token** 버튼 → 생성된 긴 토큰 (한 번만 보여 주니 꼭 복사)
+
+### 3) Render에 배포하기
+1. https://render.com 가입 (GitHub 계정으로 로그인)
+2. **New + → Blueprint** → 1단계의 `study-planner` 저장소 선택 (`render.yaml`을 자동으로 읽음)
+3. 환경 변수 입력 화면에서
+   - `TURSO_DATABASE_URL` ← 2단계의 Database URL
+   - `TURSO_AUTH_TOKEN` ← 2단계의 토큰
+   - `ANTHROPIC_API_KEY` ← 비워 둬도 됨 (사진 AI 인식을 쓸 때만)
+4. **Apply / Deploy** → 몇 분 후 `https://exam-study-planner-xxxx.onrender.com` 같은 주소가 생김
+
+> 코드를 고친 뒤 GitHub에 다시 올리면 Render가 자동으로 새로 배포합니다.
+
+### (참고) 유료로 항상 켜 두기
+Render에서 서비스의 Instance Type을 Starter(유료)로 바꾸면 잠들지 않습니다. Turso는 그대로 무료로 써도 됩니다.
+
+### (참고) Docker로 직접 운영
+```bash
+docker build -t study-planner .
+docker run -d -p 3000:3000 -v planner-data:/app/data -e JWT_SECRET=아무_긴_문자열 study-planner
+```
+
+---
+
+## API 요약
+
+| Method | 경로 | 설명 |
+|---|---|---|
+| POST | `/api/auth/signup`, `/api/auth/login` | 회원가입 / 로그인 → 토큰 |
+| GET/PUT | `/api/settings` | 학교·학원·생활 패턴 설정 |
+| GET/POST/PUT/DELETE | `/api/exams(/:id)` | 시험 과목 |
+| GET | `/api/config` | AI 인식 사용 가능 여부 |
+| POST | `/api/exams/extract` `{image \| text, today}` | 사진/글에서 과목·날짜·범위 추출 |
+| POST | `/api/exams/bulk` `{exams:[…]}` | 여러 과목 한 번에 추가/업데이트 |
+| POST | `/api/generate` `{startDate}` | 공부 계획 자동 생성 |
+| GET | `/api/summary?from&to` | 캘린더용 날짜별 요약 |
+| GET | `/api/day/:date` | 하루 플래너 (고정 일정 + 할 일 + 메모) |
+| POST/PATCH/DELETE | `/api/tasks(/:id)` | 할 일 추가 / 체크·메모·미루기 / 삭제 |
+| PUT | `/api/memo/:date` | 회고·기분 |
+| POST | `/api/focus/:date` | 타이머 집중 시간 기록 |
+| GET | `/api/stats` | 과목별 진행률, 연속 공부 일수 |
+
+## 폴더 구조
+
+```
+study-planner/
+├── server.js        # Express API + 정적 파일 서빙
+├── scheduler.js     # 계획 자동 생성 알고리즘
+├── scopeParser.js   # 시험 범위 글 분석기 (무료 인식)
+├── db.js            # DB 연결 (로컬 파일 / Turso 자동 선택)
+├── public/
+│   ├── index.html   # 캘린더 (첫 화면)
+│   ├── calendar.js
+│   ├── planner.html # 하루 플래너 (새 창)
+│   ├── planner.js
+│   ├── common.js    # API·날짜·동기화 공통 함수
+│   └── style.css    # 플래너 디자인
+├── Dockerfile
+└── render.yaml
+```

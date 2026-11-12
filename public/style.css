@@ -1,0 +1,135 @@
+@import url('https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Nanum+Pen+Script&display=swap');
+
+:root {
+  --bg: #ece5d6;
+  --paper: #fffdf6;
+  --ink: #3a3631;
+  --muted: #8b8478;
+  --line: #e9e1d0;
+  --rule: #dfe8f0;
+  --accent: #e07a5f;
+  --sage: #81b29a;
+  --sky: #7fa7c9;
+  --butter: #f2cc8f;
+  --sun: #d9534f;
+  --sat: #4a78b0;
+  --shadow: 0 1px 0 #e0d6c1, 0 12px 32px rgba(90, 70, 40, .10);
+  --radius: 8px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: 'Gowun Dodum', system-ui, sans-serif;
+  color: var(--ink);
+  background-color: var(--bg);
+  background-image: radial-gradient(#d6cbb3 1px, transparent 1.2px);
+  background-size: 22px 22px;
+  min-height: 100vh;
+  font-size: 15px;
+}
+a { color: inherit; }
+.hand { font-family: 'Nanum Pen Script', cursive; }
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* ── 버튼/입력 ── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: 1.5px solid var(--ink); background: var(--paper); border-radius: 999px;
+  padding: 8px 16px; cursor: pointer; text-decoration: none; font-size: 14px;
+  box-shadow: 2px 2px 0 var(--ink); transition: transform .1s, box-shadow .1s;
+  white-space: nowrap;
+}
+.btn:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--ink); }
+.btn:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--ink); }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--ink); }
+.btn.sage { background: var(--sage); color: #fff; }
+.btn.ghost { box-shadow: none; border-color: var(--line); }
+.btn.small { padding: 4px 10px; font-size: 13px; box-shadow: 1px 1px 0 var(--ink); }
+.btn:disabled { opacity: .5; cursor: wait; }
+.input, select.input, textarea.input {
+  width: 100%; border: none; border-bottom: 1.5px dashed #cbbfa8; background: transparent;
+  padding: 7px 2px; outline: none; font-size: 15px;
+}
+.input:focus { border-bottom-color: var(--accent); }
+label.field { display: block; font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+label.field > .input { color: var(--ink); margin-top: 2px; }
+
+/* ── 노트 종이 & 장식 ── */
+.paper {
+  background: var(--paper); border-radius: var(--radius); box-shadow: var(--shadow);
+  position: relative;
+}
+.tape {
+  position: absolute; top: -13px; left: 50%; width: 120px; height: 26px;
+  transform: translateX(-50%) rotate(-2.5deg);
+  background: repeating-linear-gradient(45deg, rgba(242, 204, 143, .85) 0 8px, rgba(246, 216, 166, .85) 8px 16px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .06); z-index: 2;
+}
+.tape.pink { background: repeating-linear-gradient(45deg, rgba(232, 153, 141, .75) 0 8px, rgba(240, 180, 170, .75) 8px 16px); }
+.tape.green { background: repeating-linear-gradient(45deg, rgba(129, 178, 154, .7) 0 8px, rgba(160, 200, 180, .7) 8px 16px); }
+.rings {
+  position: absolute; top: 24px; bottom: 24px; left: -11px; width: 22px; z-index: 3;
+  background: radial-gradient(circle at 50% 50%, #fff 0 4px, #b9ae99 4.5px 7px, transparent 7.5px) 0 0 / 22px 36px repeat-y;
+  pointer-events: none;
+}
+.section-title { font-family: 'Nanum Pen Script', cursive; font-size: 28px; margin: 0 0 8px; line-height: 1; }
+.section-title .hl { background: linear-gradient(transparent 55%, rgba(242, 204, 143, .8) 55%); padding: 0 4px; }
+.muted { color: var(--muted); }
+.chip {
+  display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--c, #999) 22%, #fff); color: color-mix(in srgb, var(--c, #999) 70%, #000);
+  border: 1px solid color-mix(in srgb, var(--c, #999) 45%, #fff);
+}
+
+/* ── 토스트 ── */
+#toast {
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px);
+  background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 999px;
+  opacity: 0; pointer-events: none; transition: .25s; z-index: 1000; font-size: 14px;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── 모달 ── */
+.overlay {
+  position: fixed; inset: 0; background: rgba(58, 54, 49, .45); display: none;
+  align-items: flex-start; justify-content: center; z-index: 500; padding: 40px 16px; overflow: auto;
+}
+.overlay.open { display: flex; }
+.modal { width: 100%; max-width: 760px; padding: 28px; }
+.modal.narrow { max-width: 380px; margin-top: 8vh; }
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.x { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--muted); }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1.5px solid var(--line); margin-bottom: 18px; flex-wrap: wrap; }
+.tabs button {
+  background: none; border: none; padding: 8px 14px; cursor: pointer; color: var(--muted);
+  border-bottom: 3px solid transparent; margin-bottom: -1.5px;
+}
+.tabs button.on { color: var(--ink); border-bottom-color: var(--accent); }
+.tab-pane { display: none; }
+.tab-pane.on { display: block; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 14px; }
+table.week { width: 100%; border-collapse: collapse; }
+table.week td, table.week th { padding: 6px 4px; border-bottom: 1px dashed var(--line); text-align: left; font-weight: normal; }
+table.week th { color: var(--muted); font-size: 13px; }
+.daypick { display: flex; gap: 4px; flex-wrap: wrap; }
+.daypick label { cursor: pointer; }
+.daypick input { display: none; }
+.daypick span {
+  display: inline-block; width: 30px; height: 30px; line-height: 28px; text-align: center;
+  border: 1.5px solid var(--line); border-radius: 50%; font-size: 13px;
+}
+.daypick input:checked + span { background: var(--sky); color: #fff; border-color: var(--sky); }
+.list-card {
+  border: 1.5px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+  display: flex; gap: 12px; align-items: center; background: #fff;
+}
+.list-card .grow { flex: 1; min-width: 0; }
+.stars { color: #e0a52a; letter-spacing: 1px; }
+
+@media (max-width: 640px) {
+  .grid2, .grid3 { grid-template-columns: 1fr; }
+  .modal { padding: 20px 16px; }
+}

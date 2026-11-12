@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>시험 공부 플래너 · 캘린더</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .book { max-width: 1320px; margin: 28px auto; padding: 0 18px; display: grid; grid-template-columns: 310px 1fr; }
+    .book > .left { border-radius: var(--radius) 0 0 var(--radius); padding: 30px 26px; border-right: 1px solid var(--line); }
+    .book > .right { border-radius: 0 var(--radius) var(--radius) 0; padding: 30px 30px 26px 38px; }
+    .brand { font-family: 'Nanum Pen Script', cursive; font-size: 38px; word-break: keep-all; line-height: .9; margin: 4px 0 2px; }
+    .brand small { display: block; font-family: 'Gowun Dodum'; font-size: 12px; color: var(--muted); letter-spacing: 2px; margin-top: 8px; }
+    .hello { margin: 18px 0 22px; font-size: 14px; color: var(--muted); }
+    .hello b { color: var(--ink); }
+
+    .big-dday { background: #fff7e6; border: 1.5px dashed var(--butter); border-radius: 12px; padding: 14px 16px; margin-bottom: 22px; position: relative; }
+    .big-dday .n { font-family: 'Nanum Pen Script', cursive; font-size: 56px; line-height: 1; color: var(--accent); }
+    .big-dday .s { font-size: 13px; color: var(--muted); }
+    .dlist { list-style: none; padding: 0; margin: 0 0 22px; }
+    .dlist li a { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px dashed var(--line); text-decoration: none; font-size: 14px; }
+    .dlist li a:hover { background: #fffaf0; }
+    .dlist .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+    .dlist .dd { margin-left: auto; font-family: 'Nanum Pen Script', cursive; font-size: 22px; color: var(--accent); }
+    .dlist .past { opacity: .45; }
+
+    .prog { margin-bottom: 10px; font-size: 13px; }
+    .prog .row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+    .bar { height: 9px; background: #f1ebde; border-radius: 99px; overflow: hidden; }
+    .bar > i { display: block; height: 100%; background: var(--c, var(--sage)); border-radius: 99px; transition: width .4s; }
+    .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 22px; }
+    .stat { text-align: center; background: #f7f3ea; border-radius: 10px; padding: 10px 4px; }
+    .stat b { display: block; font-family: 'Nanum Pen Script', cursive; font-size: 28px; line-height: 1; }
+    .stat span { font-size: 11px; color: var(--muted); }
+    .side-actions { display: grid; gap: 10px; margin-top: 8px; }
+    .side-actions .btn { width: 100%; }
+
+    .cal-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .cal-head h2 { font-family: 'Nanum Pen Script', cursive; font-size: 46px; margin: 0; line-height: 1; min-width: 190px; }
+    .cal-head h2 small { font-size: 26px; color: var(--muted); margin-left: 6px; }
+    .cal-head .sp { flex: 1; }
+    .round { width: 36px; height: 36px; padding: 0; }
+    .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin: 0 0 10px; flex-wrap: wrap; }
+    .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+
+    .cal { display: grid; grid-template-columns: repeat(7, 1fr); border-top: 1.5px solid var(--ink); border-left: 1px solid var(--line); }
+    .cal .wd { text-align: center; padding: 8px 0; font-size: 13px; border-right: 1px solid var(--line); border-bottom: 1.5px solid var(--ink); }
+    .cal .wd.sun { color: var(--sun); } .cal .wd.sat { color: var(--sat); }
+    a.day {
+      position: relative; min-height: 112px; padding: 6px 7px 8px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+      text-decoration: none; display: flex; flex-direction: column; gap: 4px; transition: background .15s; overflow: hidden;
+      background-image: linear-gradient(var(--rule) 1px, transparent 1px); background-size: 100% 22px; background-position: 0 30px;
+    }
+    a.day:hover { background-color: #fff6e3; }
+    a.day.other { opacity: .38; }
+    a.day .num { font-size: 15px; width: 26px; height: 26px; line-height: 26px; text-align: center; border-radius: 50%; }
+    a.day.sun .num { color: var(--sun); } a.day.sat .num { color: var(--sat); }
+    a.day.today .num { background: var(--accent); color: #fff; }
+    a.day.past:not(.today) { background-color: #faf8f2; }
+    .sticker {
+      font-size: 12px; padding: 2px 7px; border-radius: 4px; background: var(--c); color: #fff; align-self: flex-start;
+      transform: rotate(-2deg); box-shadow: 1px 1px 0 rgba(0,0,0,.12); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .sticker::before { content: '★ '; }
+    .dots { display: flex; gap: 3px; flex-wrap: wrap; }
+    .dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+    .mini { margin-top: auto; }
+    .mini .bar { height: 6px; }
+    .mini small { font-size: 11px; color: var(--muted); }
+    .mood { position: absolute; top: 5px; right: 6px; font-size: 15px; }
+    .stamp {
+      position: absolute; right: 6px; bottom: 22px; font-family: 'Nanum Pen Script', cursive; color: var(--accent);
+      border: 2px solid var(--accent); border-radius: 50%; width: 38px; height: 38px; line-height: 34px; text-align: center;
+      font-size: 17px; transform: rotate(-14deg); opacity: .85;
+    }
+    .empty { text-align: center; padding: 34px 20px; border: 2px dashed var(--line); border-radius: 12px; margin-bottom: 18px; }
+    .empty p { margin: 6px 0 14px; color: var(--muted); }
+
+
+    /* 빠른 입력 (사진·글) */
+    .quick { background: #fbf8f1; border: 1.5px dashed #d8ccb4; border-radius: 12px; padding: 14px 16px; margin-bottom: 20px; }
+    .quick-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+    .quick-head .chip { font-size: 11px; }
+    .drop {
+      border: 2px dashed #cbbfa8; border-radius: 10px; padding: 18px; text-align: center; cursor: pointer; background: #fff;
+      transition: .15s; display: flex; align-items: center; gap: 14px; justify-content: center; flex-wrap: wrap;
+    }
+    .drop:hover, .drop.over { border-color: var(--accent); background: #fff6f2; }
+    .drop:focus-visible { outline: 2px solid var(--sky); }
+    .drop .big { font-size: 30px; }
+    .drop img { max-height: 120px; max-width: 200px; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
+    .quick details { margin-top: 10px; }
+    .quick summary { cursor: pointer; font-size: 14px; padding: 4px 0; }
+    .quick textarea { min-height: 120px; border: 1.5px solid var(--line); border-radius: 8px; padding: 8px 10px; background: #fff; margin: 6px 0 8px; font-size: 14px; resize: vertical; }
+    .qstatus { font-size: 13px; margin-top: 10px; min-height: 0; }
+    .qstatus .spin { display: inline-block; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .cands { margin-top: 12px; }
+    .cand { display: grid; grid-template-columns: 26px 1.1fr 1.2fr .9fr 2.6fr 28px; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+    .cand.head { font-size: 12px; color: var(--muted); border-bottom: 1.5px solid var(--line); }
+    .cand .input { padding: 4px 2px; font-size: 14px; }
+    .cand.nodate input[type=date] { border-bottom-color: var(--sun); background: #fff1ef; }
+    .cand.off { opacity: .4; }
+    .cand-foot { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+    @media (max-width: 640px) {
+      .cand { grid-template-columns: 26px 1fr 1fr 28px; }
+      .cand .c-diff { display: none; }
+      .cand .c-scope { grid-column: 2 / 4; }
+      .cand.head { display: none; }
+    }
+
+    @media (max-width: 960px) {
+      .book { grid-template-columns: 1fr; }
+      .book > .left { border-radius: var(--radius) var(--radius) 0 0; border-right: none; border-bottom: 1px solid var(--line); }
+      .book > .right { border-radius: 0 0 var(--radius) var(--radius); padding: 24px 14px; }
+      .rings { display: none; }
+    }
+    @media (max-width: 560px) {
+      a.day { min-height: 74px; padding: 4px; }
+      .sticker { font-size: 10px; padding: 1px 4px; }
+      .sticker::before { content: ''; }
+      .mini small, .stamp { display: none; }
+      .cal-head h2 { font-size: 36px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="book" id="app" hidden>
+    <!-- 왼쪽 페이지: 요약 -->
+    <aside class="paper left">
+      <div class="tape pink"></div>
+      <h1 class="brand">시험 공부 플래너<small>EXAM STUDY PLANNER</small></h1>
+      <p class="hello"><b id="uname"></b> 님, 오늘도 한 칸씩 채워봐요 ✏️</p>
+
+      <div class="big-dday" id="bigDday"></div>
+
+      <h3 class="section-title"><span class="hl">D-Day</span></h3>
+      <ul class="dlist" id="dlist"></ul>
+
+      <h3 class="section-title"><span class="hl">과목별 진행률</span></h3>
+      <div id="progList"></div>
+      <div class="stat-row">
+        <div class="stat"><b id="stPct">0%</b><span>전체 달성률</span></div>
+        <div class="stat"><b id="stStreak">0일</b><span>연속 공부</span></div>
+        <div class="stat"><b id="stFocus">0분</b><span>타이머 집중</span></div>
+      </div>
+
+      <div class="side-actions">
+        <button class="btn primary" id="btnGenerate">✨ 공부 계획 자동 생성</button>
+        <a class="btn sage" id="todayLink" target="_blank" rel="opener">📖 오늘 플래너 열기</a>
+        <button class="btn" id="btnSettings">⚙️ 시험·시간표 설정</button>
+        <button class="btn ghost" id="btnLogout">로그아웃</button>
+      </div>
+    </aside>
+
+    <!-- 오른쪽 페이지: 달력 -->
+    <section class="paper right">
+      <div class="rings"></div>
+      <div class="cal-head">
+        <h2 id="calTitle"></h2>
+        <button class="btn round" id="prevM" aria-label="이전 달">‹</button>
+        <button class="btn round" id="nextM" aria-label="다음 달">›</button>
+        <button class="btn small ghost" id="thisM">이번 달</button>
+        <span class="sp"></span>
+        <span class="muted" style="font-size:13px">날짜를 누르면 그날의 플래너가 새 창으로 열려요</span>
+      </div>
+      <div id="emptyBox"></div>
+      <div class="legend">
+        <span><i style="background:var(--accent)"></i>시험일</span>
+        <span>● 과목별 공부 계획</span>
+        <span>▬ 하루 달성률</span>
+        <span style="color:var(--accent)">◎ 100% 완료 도장</span>
+      </div>
+      <div class="cal" id="cal"></div>
+    </section>
+  </main>
+
+  <!-- 로그인 -->
+  <div class="overlay" id="authOv">
+    <form class="paper modal narrow" id="authForm">
+      <div class="tape"></div>
+      <h2 class="brand" style="text-align:center">시험 공부 플래너</h2>
+      <p class="muted" style="text-align:center;font-size:13px;margin:4px 0 20px">시험 날짜와 시간표만 넣으면 공부 계획이 자동으로 짜여요</p>
+      <label class="field">아이디<input class="input" name="username" autocomplete="username" required /></label>
+      <label class="field">비밀번호<input class="input" name="password" type="password" autocomplete="current-password" required /></label>
+      <p id="authErr" style="color:var(--sun);font-size:13px;min-height:18px;margin:0 0 8px"></p>
+      <button class="btn primary" style="width:100%" id="authSubmit">로그인</button>
+      <p style="text-align:center;font-size:13px;margin:16px 0 0" class="muted">
+        <span id="authHint">처음이신가요?</span>
+        <a href="#" id="authToggle">회원가입</a>
+      </p>
+    </form>
+  </div>
+
+  <!-- 설정 -->
+  <div class="overlay" id="setOv">
+    <div class="paper modal">
+      <div class="tape green"></div>
+      <div class="modal-head">
+        <h2 class="section-title" style="margin:0"><span class="hl">시험 · 시간표 설정</span></h2>
+        <button class="x" id="setClose" aria-label="닫기">✕</button>
+      </div>
+      <div class="tabs" id="tabs">
+        <button data-tab="exam" class="on">📝 시험 과목</button>
+        <button data-tab="school">🏫 학교 시간</button>
+        <button data-tab="academy">🎒 학원</button>
+        <button data-tab="life">🌙 생활 패턴</button>
+      </div>
+
+      <div class="tab-pane on" data-pane="exam">
+        <div class="quick">
+          <div class="quick-head">
+            <b>⚡ 시험 범위 빠르게 입력하기</b>
+            <span class="chip" id="aiBadge" style="--c:#81b29a">자동 인식</span>
+          </div>
+          <div class="drop" id="drop" tabindex="0" role="button" aria-label="시험 범위 사진 선택">
+            <input type="file" id="imgFile" accept="image/*" hidden />
+            <span class="big">📷</span>
+            <div>
+              <b>시험 범위 사진·캡처</b>를 끌어다 놓거나 <u>클릭해서 선택</u><br />
+              <span class="muted" style="font-size:13px">캡처(Win+Shift+S) 후 이 창에서 <b>Ctrl+V</b> 해도 돼요 · 휴대폰은 바로 촬영 가능</span>
+            </div>
+            <img id="dropPreview" alt="" hidden />
+          </div>
+          <details id="pasteBox">
+            <summary>📋 시험 범위 <b>글</b>을 복사해서 붙여넣기 (가정통신문, 단톡방 공지 등)</summary>
+            <textarea class="input" id="pasteText" placeholder="예)&#10;11월 24일(화)&#10;국어: 1단원~3단원, 문법&#10;영어 - Lesson 3, Lesson 4&#10;11/25(수) 수학 다항식, 방정식, 부등식"></textarea>
+            <button type="button" class="btn small" id="parseText">🔍 글에서 과목·범위 찾기</button>
+          </details>
+          <div class="qstatus" id="qStatus"></div>
+          <div id="qResult"></div>
+        </div>
+
+        <h4 style="margin:0 0 8px">✍️ 직접 입력</h4>
+        <form id="examForm">
+          <input type="hidden" name="id" />
+          <div class="grid3">
+            <label class="field">과목<input class="input" name="subject" placeholder="예) 수학" required maxlength="30" /></label>
+            <label class="field">시험 날짜<input class="input" name="date" type="date" required /></label>
+            <label class="field">난이도 (어려울수록 시간 ↑)
+              <select class="input" name="difficulty">
+                <option value="1">★ 쉬움</option><option value="2">★★</option><option value="3" selected>★★★ 보통</option>
+                <option value="4">★★★★</option><option value="5">★★★★★ 어려움</option>
+              </select>
+            </label>
+          </div>
+          <label class="field">시험 범위 — 단원을 쉼표(,)로 구분하면 단원별로 나눠서 계획해요
+            <input class="input" name="scope" placeholder="예) 1단원 다항식, 2단원 방정식, 3단원 부등식" maxlength="500" />
+          </label>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:18px">
+            <label class="muted" style="font-size:13px">색상 <input type="color" name="color" value="#e07a5f" style="vertical-align:middle;border:none;background:none;width:34px;height:26px" /></label>
+            <span style="flex:1"></span>
+            <button type="button" class="btn small ghost" id="examCancel" hidden>취소</button>
+            <button class="btn small primary" id="examSubmit">+ 과목 추가</button>
+          </div>
+        </form>
+        <div id="examList"></div>
+      </div>
+
+      <div class="tab-pane" data-pane="school">
+        <table class="week" id="schoolTable">
+          <thead><tr><th>요일</th><th>등교</th><th>시작</th><th>끝</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <h4 style="margin:22px 0 6px">시험 당일 학교 시간</h4>
+        <p class="muted" style="font-size:13px;margin:0 0 8px">시험 날은 보통 일찍 끝나니까, 남은 오후는 다음 시험 공부에 배정돼요.</p>
+        <div class="grid2">
+          <label class="field">시작<input class="input" type="time" id="examDayStart" /></label>
+          <label class="field">끝<input class="input" type="time" id="examDayEnd" /></label>
+        </div>
+      </div>
+
+      <div class="tab-pane" data-pane="academy">
+        <div id="acaList"></div>
+        <button class="btn small" id="acaAdd" type="button">+ 학원 추가</button>
+      </div>
+
+      <div class="tab-pane" data-pane="life">
+        <div class="grid2">
+          <label class="field">기상 시간<input class="input" type="time" id="wake" /></label>
+          <label class="field">취침 시간<input class="input" type="time" id="sleep" /></label>
+          <label class="field">저녁 시작<input class="input" type="time" id="dinnerStart" /></label>
+          <label class="field">저녁 끝<input class="input" type="time" id="dinnerEnd" /></label>
+          <label class="field">점심 시작 (학교 없는 날)<input class="input" type="time" id="lunchStart" /></label>
+          <label class="field">점심 끝<input class="input" type="time" id="lunchEnd" /></label>
+        </div>
+        <div class="grid3">
+          <label class="field">공부 블록 (분)<input class="input" type="number" min="20" max="120" step="5" id="blockMin" /></label>
+          <label class="field">쉬는 시간 (분)<input class="input" type="number" min="0" max="60" step="5" id="breakMin" /></label>
+          <label class="field">학교·학원 전후 이동 (분)<input class="input" type="number" min="0" max="120" step="5" id="bufferMin" /></label>
+          <label class="field">학교 가는 날 최대 공부 (시간)<input class="input" type="number" min="0" max="15" step="0.5" id="maxWeekday" /></label>
+          <label class="field">쉬는 날 최대 공부 (시간)<input class="input" type="number" min="0" max="15" step="0.5" id="maxWeekend" /></label>
+          <label class="field" style="display:flex;align-items:center;gap:8px;padding-top:18px">
+            <input type="checkbox" id="reviewSlot" /> 하루 마지막은 복습 시간으로
+          </label>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:22px;border-top:1px dashed var(--line);padding-top:16px">
+        <span class="muted" style="font-size:12px;margin-right:auto;align-self:center">창을 닫으면 바뀐 내용으로 계획이 자동으로 다시 짜여요</span>
+        <button class="btn primary" id="setSave">저장하고 계획 만들기</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="common.js"></script>
+  <script src="calendar.js"></script>
+</body>
+</html>

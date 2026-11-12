@@ -1,0 +1,17 @@
+{
+  "name": "exam-study-planner",
+  "version": "1.0.0",
+  "description": "시험 기간 학습 시간표 자동 생성 플래너",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.18.0",
+    "express": "^4.21.2"
+  }
+}
