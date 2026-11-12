@@ -221,6 +221,9 @@ function generatePlan({ settings: s, exams, keepTasks = [], startDate, doneCount
       let w = (e.difficulty || 3) / Math.sqrt(dl);
       if (dl === 1) w *= 4;
       else if (dl === 2) w *= 1.6;
+      // 선호 요일: 그 요일엔 이 과목 비중 ×3, 다른 요일엔 ×0.5 (시험 2일 전부터는 무시하고 시험 대비 우선)
+      const pref = String(e.pref_days || '').split(',').filter(Boolean).map(Number);
+      if (pref.length && dl > 2) w *= pref.includes(dow(date)) ? 3 : 0.5;
       return w;
     });
     const order = interleave(allocate(slots.length, weights));

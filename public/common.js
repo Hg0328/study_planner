@@ -25,9 +25,11 @@ const Auth = {
 Auth.checkVisit();
 
 // 로그인 화면으로 이동 (플래너에서 왔다면 로그인 후 그 날짜로 돌아오도록 next 전달)
+// 로그인 후 돌아갈 수 있는 주소 (그 외 주소로는 이동하지 않음)
+const SAFE_NEXT = /^(planner\.html\?date=\d{4}-\d{2}-\d{2}|race\.html(\?room=[A-Za-z0-9]{6})?)$/;
 function goLogin() {
   const here = location.pathname.split('/').pop() + location.search;
-  const ok = /^planner\.html\?date=\d{4}-\d{2}-\d{2}$/.test(here);
+  const ok = SAFE_NEXT.test(here);
   location.href = 'index.html' + (ok ? '?next=' + encodeURIComponent(here) : '');
 }
 

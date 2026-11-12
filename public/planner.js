@@ -260,7 +260,10 @@ function drawTimer() {
   $('#tStart').textContent = timer.run ? '⏸ 일시정지' : '▶ 시작';
   document.querySelectorAll('#modes button').forEach((b) => b.classList.toggle('on', +b.dataset.m * 60 === timer.total));
 }
+// 공부 마라톤에 "공부 중/휴식" 상태 알리기 (친구 화면에서 내 캐릭터가 달리거나 쉼)
+const presence = (st, min) => api('/presence', { method: 'POST', body: { state: st, minutes: min } }).catch(() => {});
 function setMode(min) {
+  if (timer.run) presence('rest');
   clearInterval(timer.iv); timer.run = false;
   timer.total = timer.left = min * 60; timer.isBreak = min <= 10;
   drawTimer();
@@ -268,14 +271,16 @@ function setMode(min) {
 $('#modes').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setMode(+b.dataset.m); });
 $('#tReset').onclick = () => setMode(timer.total / 60);
 $('#tStart').onclick = () => {
-  if (timer.run) { clearInterval(timer.iv); timer.run = false; drawTimer(); return; }
+  if (timer.run) { clearInterval(timer.iv); timer.run = false; drawTimer(); presence('rest'); return; }
   timer.run = true;
   const endAt = Date.now() + timer.left * 1000;
+  presence(timer.isBreak ? 'rest' : 'study', Math.ceil(timer.left / 60));
   timer.iv = setInterval(async () => {
     timer.left = Math.max(0, Math.round((endAt - Date.now()) / 1000));
     drawTimer();
     if (timer.left === 0) {
       clearInterval(timer.iv); timer.run = false; beep();
+      presence('rest');
       if (!timer.isBreak) {
         const r = await api('/focus/' + date, { method: 'POST', body: { minutes: timer.total / 60 } });
         data.memo.focus_min = r.focus_min; renderProgress();

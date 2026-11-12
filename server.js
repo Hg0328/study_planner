@@ -126,7 +126,10 @@ function cleanExam(b, fallbackColor) {
   if (!isDate(b.date)) return { error: '시험 날짜가 올바르지 않아요' };
   const difficulty = Math.min(5, Math.max(1, Number(b.difficulty) || 3));
   const color = /^#[0-9a-f]{6}$/i.test(b.color || '') ? b.color : fallbackColor;
-  return { subject, date: b.date, difficulty, scope: String(b.scope || '').slice(0, 500), color };
+  // 선호 요일 (0=일 ~ 6=토) → "1,3" 형태로 저장
+  const rawDays = Array.isArray(b.pref_days) ? b.pref_days : String(b.pref_days || '').split(',');
+  const pref_days = [...new Set(rawDays.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6) )].sort().join(',');
+  return { subject, date: b.date, difficulty, scope: String(b.scope || '').slice(0, 500), color, pref_days };
 }
 app.get('/api/exams', auth, h(async (req, res) => res.json(await getExams(req.uid))));
 app.post('/api/exams', auth, h(async (req, res) => {
@@ -134,8 +137,8 @@ app.post('/api/exams', auth, h(async (req, res) => {
   if (n >= 30) return bad(res, '시험 과목은 최대 30개까지 등록할 수 있어요');
   const e = cleanExam(req.body || {}, S.PALETTE[n % S.PALETTE.length]);
   if (e.error) return bad(res, e.error);
-  const r = await db.run('INSERT INTO exams(user_id,subject,date,difficulty,scope,color) VALUES(?,?,?,?,?,?)',
-    [req.uid, e.subject, e.date, e.difficulty, e.scope, e.color]);
+  const r = await db.run('INSERT INTO exams(user_id,subject,date,difficulty,scope,color,pref_days) VALUES(?,?,?,?,?,?,?)',
+    [req.uid, e.subject, e.date, e.difficulty, e.scope, e.color, e.pref_days]);
   res.json({ id: r.lastInsertRowid, ...e });
 }));
 app.put('/api/exams/:id', auth, h(async (req, res) => {
@@ -144,7 +147,7 @@ app.put('/api/exams/:id', auth, h(async (req, res) => {
   const e = cleanExam({ ...cur, ...req.body }, cur.color);
   if (e.error) return bad(res, e.error);
   await db.batch([
-    { sql: 'UPDATE exams SET subject=?,date=?,difficulty=?,scope=?,color=? WHERE id=?', args: [e.subject, e.date, e.difficulty, e.scope, e.color, cur.id] },
+    { sql: 'UPDATE exams SET subject=?,date=?,difficulty=?,scope=?,color=?,pref_days=? WHERE id=?', args: [e.subject, e.date, e.difficulty, e.scope, e.color, e.pref_days, cur.id] },
     { sql: 'UPDATE tasks SET subject=? WHERE exam_id=? AND user_id=?', args: [e.subject, cur.id, req.uid] },
   ]);
   res.json({ id: cur.id, ...e });
@@ -388,6 +391,151 @@ app.get('/api/stats', auth, h(async (req, res) => {
   const focus = (await db.get('SELECT COALESCE(SUM(focus_min),0) m FROM memos WHERE user_id=?', [req.uid])).m;
   const totals = await db.get('SELECT COUNT(*) total, COALESCE(SUM(done),0) done FROM tasks WHERE user_id=?', [req.uid]);
   res.json({ subjects, streak, focusMin: focus, ...totals });
+}));
+
+// ─────────────────────────────────────────────
+//  친구와 공부 마라톤 (방 · 캐릭터 · 공부 중/휴식 상태)
+// ─────────────────────────────────────────────
+// 달리는 거리 = 그날(또는 방 시작일부터) "완료 체크한 공부 시간 + 집중 타이머 시간"
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 0/O, 1/I 제외
+const ROOM_MAX_MEMBERS = 10;
+const ROOM_MAX_PER_USER = 10;
+const HEX = /^#[0-9a-f]{6}$/i;
+const AVATAR_DEFAULT = { skin: 1, hair: 'short', hairColor: '#3b2a20', shirt: '#e07a5f', pants: '#3d5a80', shoes: '#2b2b2b', acc: 'none', accColor: '#f2cc8f' };
+const HAIRS = ['short', 'long', 'pony', 'spiky', 'bob', 'buzz'];
+const ACCS = ['none', 'cap', 'band', 'glasses', 'ribbon', 'crown', 'phones'];
+function cleanAvatar(a = {}) {
+  const d = AVATAR_DEFAULT;
+  const hex = (v, def) => (HEX.test(v || '') ? v : def);
+  return {
+    skin: Number.isInteger(a.skin) && a.skin >= 0 && a.skin <= 4 ? a.skin : d.skin,
+    hair: HAIRS.includes(a.hair) ? a.hair : d.hair,
+    hairColor: hex(a.hairColor, d.hairColor), shirt: hex(a.shirt, d.shirt), pants: hex(a.pants, d.pants),
+    shoes: hex(a.shoes, d.shoes), acc: ACCS.includes(a.acc) ? a.acc : d.acc, accColor: hex(a.accColor, d.accColor),
+  };
+}
+const parseAvatar = (s) => { try { return s ? cleanAvatar(JSON.parse(s)) : null; } catch { return null; } };
+
+app.get('/api/avatar', auth, h(async (req, res) => {
+  const r = await db.get('SELECT data FROM avatars WHERE user_id=?', [req.uid]);
+  res.json({ avatar: parseAvatar(r?.data), defaults: AVATAR_DEFAULT });
+}));
+app.put('/api/avatar', auth, h(async (req, res) => {
+  const a = cleanAvatar(req.body.avatar || {});
+  await db.run('INSERT INTO avatars(user_id,data) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET data=excluded.data', [req.uid, JSON.stringify(a)]);
+  res.json({ avatar: a });
+}));
+
+// 공부 중 / 휴식 상태 (집중 타이머가 알려 줌)
+app.post('/api/presence', auth, h(async (req, res) => {
+  const now = Date.now();
+  const study = req.body.state === 'study';
+  const min = Math.min(180, Math.max(1, Number(req.body.minutes) || 25));
+  const cur = await db.get('SELECT state, since FROM presence WHERE user_id=?', [req.uid]);
+  const since = cur && cur.state === (study ? 'study' : 'rest') ? cur.since : now;
+  await db.run(`INSERT INTO presence(user_id,state,since,until) VALUES(?,?,?,?)
+    ON CONFLICT(user_id) DO UPDATE SET state=excluded.state, since=excluded.since, until=excluded.until`,
+    [req.uid, study ? 'study' : 'rest', since, study ? now + min * 60e3 : null]);
+  res.json({ ok: true });
+}));
+
+async function roomFor(req, res) {
+  const code = String(req.params.code || '').toUpperCase();
+  const room = await db.get('SELECT * FROM rooms WHERE code=?', [code]);
+  if (!room) { res.status(404).json({ error: '없는 방이에요. 입장 코드를 확인해 주세요' }); return null; }
+  return room;
+}
+const isMember = async (roomId, uid) => !!(await db.get('SELECT 1 FROM room_members WHERE room_id=? AND user_id=?', [roomId, uid]));
+
+app.get('/api/rooms', auth, h(async (req, res) => {
+  res.json(await db.all(`SELECT r.code, r.name, r.goal_min, r.owner_id, (SELECT COUNT(*) FROM room_members x WHERE x.room_id=r.id) members
+    FROM rooms r JOIN room_members m ON m.room_id=r.id WHERE m.user_id=? ORDER BY m.joined_at DESC`, [req.uid]));
+}));
+
+app.post('/api/rooms', auth, h(async (req, res) => {
+  const name = String(req.body.name || '').trim().slice(0, 20) || '공부 마라톤';
+  const goal = Math.min(720, Math.max(30, Math.round(Number(req.body.goalMin) || 240)));
+  const today = isDate(req.body.today) ? req.body.today : new Date().toISOString().slice(0, 10);
+  const n = (await db.get('SELECT COUNT(*) c FROM room_members WHERE user_id=?', [req.uid])).c;
+  if (n >= ROOM_MAX_PER_USER) return bad(res, `방은 최대 ${ROOM_MAX_PER_USER}개까지 들어갈 수 있어요`);
+  let code;
+  for (let i = 0; i < 20; i++) {
+    code = Array.from(crypto.randomBytes(6), (b) => CODE_CHARS[b % CODE_CHARS.length]).join('');
+    if (!(await db.get('SELECT 1 FROM rooms WHERE code=?', [code]))) break;
+  }
+  const r = await db.run('INSERT INTO rooms(code,name,owner_id,goal_min,start_date) VALUES(?,?,?,?,?)', [code, name, req.uid, goal, today]);
+  await db.run('INSERT INTO room_members(room_id,user_id) VALUES(?,?)', [r.lastInsertRowid, req.uid]);
+  res.json({ code, name });
+}));
+
+app.post('/api/rooms/join', auth, h(async (req, res) => {
+  req.params.code = String(req.body.code || '').trim();
+  if (!/^[A-Za-z0-9]{6}$/.test(req.params.code)) return bad(res, '입장 코드는 6자리예요');
+  const room = await roomFor(req, res); if (!room) return;
+  if (await isMember(room.id, req.uid)) return res.json({ code: room.code, name: room.name, already: true });
+  const cnt = (await db.get('SELECT COUNT(*) c FROM room_members WHERE room_id=?', [room.id])).c;
+  if (cnt >= ROOM_MAX_MEMBERS) return bad(res, `방이 가득 찼어요 (최대 ${ROOM_MAX_MEMBERS}명)`);
+  const mine = (await db.get('SELECT COUNT(*) c FROM room_members WHERE user_id=?', [req.uid])).c;
+  if (mine >= ROOM_MAX_PER_USER) return bad(res, `방은 최대 ${ROOM_MAX_PER_USER}개까지 들어갈 수 있어요`);
+  await db.run('INSERT INTO room_members(room_id,user_id) VALUES(?,?)', [room.id, req.uid]);
+  res.json({ code: room.code, name: room.name });
+}));
+
+// 방 상태: 참가자별 캐릭터, 오늘/누적 공부 시간, 공부 중·휴식 상태
+app.get('/api/rooms/:code', auth, h(async (req, res) => {
+  const room = await roomFor(req, res); if (!room) return;
+  if (!(await isMember(room.id, req.uid))) return res.status(403).json({ error: '이 방의 참가자가 아니에요. 입장 코드로 먼저 들어와 주세요' });
+  const today = isDate(req.query.today) ? req.query.today : new Date().toISOString().slice(0, 10);
+  const members = await db.all(`
+    SELECT u.id, u.username, a.data avatar, p.state, p.since, p.until
+    FROM room_members m JOIN users u ON u.id=m.user_id
+    LEFT JOIN avatars a ON a.user_id=u.id LEFT JOIN presence p ON p.user_id=u.id
+    WHERE m.room_id=? ORDER BY m.joined_at, u.id`, [room.id]);
+  const ids = members.map((m) => m.id);
+  const ph = ids.map(() => '?').join(',');
+  const sum = async (sql, args) => Object.fromEntries((await db.all(sql, args)).map((r) => [r.user_id, Number(r.m) || 0]));
+  const taskSql = (cond) => `SELECT user_id, SUM(end-start) m FROM tasks WHERE user_id IN (${ph}) AND done=1 AND start IS NOT NULL AND ${cond} GROUP BY user_id`;
+  const focusSql = (cond) => `SELECT user_id, SUM(focus_min) m FROM memos WHERE user_id IN (${ph}) AND ${cond} GROUP BY user_id`;
+  const [tT, tA, fT, fA] = await Promise.all([
+    sum(taskSql('date=?'), [...ids, today]),
+    sum(taskSql('date BETWEEN ? AND ?'), [...ids, room.start_date, today]),
+    sum(focusSql('date=?'), [...ids, today]),
+    sum(focusSql('date BETWEEN ? AND ?'), [...ids, room.start_date, today]),
+  ]);
+  const now = Date.now();
+  res.json({
+    room: { code: room.code, name: room.name, goalMin: room.goal_min, startDate: room.start_date, isOwner: room.owner_id === req.uid },
+    me: req.uid,
+    members: members.map((m) => {
+      const running = m.state === 'study' && m.until > now;
+      const restMin = running ? 0 : m.state ? Math.floor((now - (m.state === 'rest' ? m.since : m.until)) / 60e3) : null;
+      return {
+        id: m.id, username: m.username, avatar: parseAvatar(m.avatar) || AVATAR_DEFAULT, hasAvatar: !!m.avatar,
+        todayMin: (tT[m.id] || 0) + (fT[m.id] || 0), totalMin: (tA[m.id] || 0) + (fA[m.id] || 0),
+        // run: 공부 중 · drink: 잠깐 휴식(20분 미만) · sleep: 오래 쉬는 중
+        status: running ? 'run' : restMin !== null && restMin < 20 ? 'drink' : 'sleep',
+        runLeftMin: running ? Math.ceil((m.until - now) / 60e3) : 0,
+      };
+    }),
+  });
+}));
+
+app.put('/api/rooms/:code', auth, h(async (req, res) => {
+  const room = await roomFor(req, res); if (!room) return;
+  if (room.owner_id !== req.uid) return res.status(403).json({ error: '방장만 바꿀 수 있어요' });
+  const name = String(req.body.name ?? room.name).trim().slice(0, 20) || room.name;
+  const goal = Math.min(720, Math.max(30, Math.round(Number(req.body.goalMin) || room.goal_min)));
+  await db.run('UPDATE rooms SET name=?, goal_min=? WHERE id=?', [name, goal, room.id]);
+  res.json({ ok: true });
+}));
+
+app.delete('/api/rooms/:code/me', auth, h(async (req, res) => {
+  const room = await roomFor(req, res); if (!room) return;
+  await db.run('DELETE FROM room_members WHERE room_id=? AND user_id=?', [room.id, req.uid]);
+  const next = await db.get('SELECT user_id FROM room_members WHERE room_id=? ORDER BY joined_at LIMIT 1', [room.id]);
+  if (!next) await db.run('DELETE FROM rooms WHERE id=?', [room.id]); // 아무도 없으면 방 삭제
+  else if (room.owner_id === req.uid) await db.run('UPDATE rooms SET owner_id=? WHERE id=?', [next.user_id, room.id]); // 방장 넘기기
+  res.json({ ok: true });
 }));
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));

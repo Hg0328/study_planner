@@ -24,7 +24,7 @@ $('#authForm').onsubmit = async (e) => {
     const r = await api(signup ? '/auth/signup' : '/auth/login', { method: 'POST', body: { username: f.get('username'), password: f.get('password') } });
     Auth.set(r.token, r.username);
     const next = new URLSearchParams(location.search).get('next');
-    if (next && /^planner\.html\?date=\d{4}-\d{2}-\d{2}$/.test(next)) { location.href = next; return; }
+    if (next && SAFE_NEXT.test(next)) { location.href = next; return; }
     $('#authOv').classList.remove('open');
     boot(signup);
   } catch (err) { $('#authErr').textContent = err.message; }
@@ -231,6 +231,7 @@ function renderExamList() {
     <span class="dot" style="width:14px;height:14px;border-radius:50%;background:${e.color};flex:none"></span>
     <div class="grow"><b>${esc(e.subject)}</b> <span class="muted" style="font-size:13px">${D.pretty(e.date)} · ${dday(D.diff(today, e.date))}</span>
       <div style="font-size:13px"><span class="stars">${'★'.repeat(e.difficulty)}${'☆'.repeat(5 - e.difficulty)}</span>
+      ${e.pref_days ? `<span class="chip" style="--c:var(--sky)">${String(e.pref_days).split(',').map((d) => DAY_KO[d]).join('·')} 선호</span>` : ''}
       <span class="muted">${esc(e.scope) || '범위 미입력'}</span></div></div>
     <button class="btn small ghost" data-edit="${e.id}">수정</button>
     <button class="x" data-rm="${e.id}" title="삭제">✕</button></div>`).join('')
@@ -247,7 +248,8 @@ $('#examCancel').onclick = resetExamForm;
 $('#examForm').onsubmit = async (e) => {
   e.preventDefault();
   const f = e.target;
-  const body = { subject: f.subject.value, date: f.date.value, difficulty: +f.difficulty.value, scope: f.scope.value, color: f.color.value };
+  const body = { subject: f.subject.value, date: f.date.value, difficulty: +f.difficulty.value, scope: f.scope.value, color: f.color.value,
+    pref_days: $$('#prefDays input:checked').map((c) => +c.value) };
   try {
     if (f.id.value) await api('/exams/' + f.id.value, { method: 'PUT', body });
     else await api('/exams', { method: 'POST', body });
@@ -263,6 +265,8 @@ $('#examList').addEventListener('click', async (e) => {
     const x = exams.find((v) => v.id == edit), f = $('#examForm');
     f.id.value = x.id; f.subject.value = x.subject; f.date.value = x.date;
     f.difficulty.value = x.difficulty; f.scope.value = x.scope; f.color.value = x.color;
+    const pd = String(x.pref_days || '').split(',');
+    $$('#prefDays input').forEach((c) => (c.checked = pd.includes(c.value)));
     $('#examSubmit').textContent = '수정 저장'; $('#examCancel').hidden = false;
     f.subject.focus();
   }
@@ -481,7 +485,8 @@ function startTour(isNew = false) {
     { el: '#btnGenerate', title: '② 계획 자동 생성', text: '빈 시간에 맞춰 <b>개념 → 문제 → 총정리</b> 순서로 공부 계획을 만들어요. 시험이 가깝고 어려운 과목에 시간을 더 줘요.<br>설정을 바꾸면 창을 닫을 때 알아서 다시 짜요.' },
     { el: '#cal', title: '③ 달력에서 날짜 누르기', text: '날짜를 누르면 <b>그날의 플래너가 새 창</b>으로 열려요. 할 일을 체크하면 이 달력에도 바로 반영되고, 다 끝낸 날엔 도장이 찍혀요.' },
     { el: '#bigDday', title: '④ D-Day와 진행률', text: '가장 가까운 시험까지 남은 날, 과목별로 얼마나 공부했는지, 며칠 연속 공부했는지 여기서 볼 수 있어요.' },
-    { el: '#btnSettings', title: '⑤ 내 맘대로 꾸미기', text: '설정 창의 <b>🎨 꾸미기</b> 탭에서 색 테마(벚꽃·민트·밤 등), 큰 글씨 글꼴, 화면 크기를 바꿀 수 있어요.' },
+    { el: '#raceLink', title: '⑤ 친구와 공부 마라톤', text: '방을 만들고 <b>입장 코드</b>를 친구에게 알려 주면 같이 달릴 수 있어요. 공부한 만큼 내 픽셀 캐릭터가 앞으로 달리고, 많이 할수록 머리에 불이 붙어요 🔥' },
+    { el: '#btnSettings', title: '⑥ 내 맘대로 꾸미기', text: '설정 창의 <b>🎨 꾸미기</b> 탭에서 색 테마(벚꽃·민트·밤 등), 큰 글씨 글꼴, 화면 크기를 바꿀 수 있어요.' },
     { el: '#btnHelp', title: '언제든 다시 보기', text: '사용법이 궁금하면 이 버튼을 눌러 주세요. 이제 시험부터 등록해 볼까요?' },
   ], { doneLabel: isNew ? '시험 등록하러 가기 →' : '완료', onDone: () => { if (isNew) openSettings(); } });
 }

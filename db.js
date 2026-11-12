@@ -50,7 +50,35 @@ CREATE TABLE IF NOT EXISTS memos (
   PRIMARY KEY (user_id, date)
 );
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS rooms (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  owner_id INTEGER NOT NULL,
+  goal_min INTEGER DEFAULT 240,
+  start_date TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS room_members (
+  room_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (room_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_room_members_user ON room_members(user_id);
+CREATE TABLE IF NOT EXISTS avatars (user_id INTEGER PRIMARY KEY, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS presence (
+  user_id INTEGER PRIMARY KEY,
+  state TEXT NOT NULL,
+  since INTEGER NOT NULL,
+  until INTEGER
+);
 `;
+
+// 이미 만들어진 DB(예: 배포된 Turso)에 새 칸을 추가하는 변경 — 이미 있으면 오류가 나므로 무시
+const MIGRATIONS = [
+  "ALTER TABLE exams ADD COLUMN pref_days TEXT DEFAULT ''",
+];
 
 // undefined/boolean 값을 DB가 받을 수 있는 형태로
 const norm = (args = []) => args.map((v) => (v === undefined ? null : typeof v === 'boolean' ? (v ? 1 : 0) : v));
@@ -63,7 +91,10 @@ function localBackend() {
   sql.exec('PRAGMA journal_mode = WAL;');
   return {
     mode: `파일 (${file})`,
-    async init() { sql.exec(SCHEMA); },
+    async init() {
+      sql.exec(SCHEMA);
+      for (const m of MIGRATIONS) { try { sql.exec(m); } catch {} }
+    },
     async get(q, args) { return sql.prepare(q).get(...norm(args)) || null; },
     async all(q, args) { return sql.prepare(q).all(...norm(args)); },
     async run(q, args) {
@@ -84,7 +115,10 @@ function tursoBackend() {
   const rows = (rs) => rs.rows.map((r) => Object.fromEntries(rs.columns.map((c, i) => [c, r[i]])));
   return {
     mode: 'Turso 클라우드',
-    async init() { await client.executeMultiple(SCHEMA); },
+    async init() {
+      await client.executeMultiple(SCHEMA);
+      for (const m of MIGRATIONS) { try { await client.execute(m); } catch {} }
+    },
     async get(q, args) { return rows(await client.execute({ sql: q, args: norm(args) }))[0] || null; },
     async all(q, args) { return rows(await client.execute({ sql: q, args: norm(args) })); },
     async run(q, args) {

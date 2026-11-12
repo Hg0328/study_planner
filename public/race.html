@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>공부 마라톤</title>
+  <script src="common.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/galmuri@2/dist/galmuri.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" />
+  <style>
+    /* ── 8비트 고전 게임 감성 ── (파란 하늘 · 흰 구름 · 벽돌 땅 · 검은 대화창) */
+    :root {
+      --sky: #5c8df6; --sky2: #8db7ff; --ink: #ffffff; --muted: #c8d4ff; --black: #000000;
+      --brick: #c4622d; --brick-dark: #7a3410; --brick-light: #f0a060; --grass: #3cbc3c;
+      --yellow: #fcd83c; --red: #e4402c; --green: #3cbc3c; --blue: #3c7cfc;
+      --en: 'Press Start 2P', 'Galmuri11', monospace; --ko: 'Galmuri11', 'Galmuri9', monospace;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { margin: 0; }
+    body {
+      font-family: var(--ko); color: var(--ink); font-size: 14px; min-height: 100vh; image-rendering: pixelated;
+      background-color: var(--sky);
+      /* 멀리 떠 있는 구름 (CSS 픽셀 구름) */
+      background-image:
+        radial-gradient(circle at 30px 30px, #fff 0 14px, transparent 15px), radial-gradient(circle at 52px 22px, #fff 0 18px, transparent 19px),
+        radial-gradient(circle at 76px 30px, #fff 0 14px, transparent 15px), linear-gradient(#fff, #fff);
+      background-size: 360px 220px, 360px 220px, 360px 220px, 0 0;
+      background-position: 40px 30px, 40px 30px, 40px 30px, 0 0;
+      padding-bottom: 72px;
+    }
+    /* 화면 아래 벽돌 땅 */
+    body::after {
+      content: ''; position: fixed; left: 0; right: 0; bottom: 0; height: 56px; z-index: 0; pointer-events: none;
+      background:
+        linear-gradient(var(--grass) 0 8px, transparent 8px),
+        repeating-linear-gradient(90deg, var(--brick-dark) 0 2px, transparent 2px 32px),
+        repeating-linear-gradient(var(--brick-dark) 0 2px, transparent 2px 16px),
+        var(--brick);
+      background-size: auto, 32px 16px, auto, auto;
+      box-shadow: inset 0 10px 0 0 var(--brick-light);
+    }
+    a { color: inherit; }
+    canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+    .wrap { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 16px 16px 40px; }
+    .en { font-family: var(--en); }
+
+    /* 상단 점수판 (HUD) */
+    .hud {
+      display: grid; grid-template-columns: repeat(4, auto); justify-content: space-between; gap: 6px 18px;
+      font-family: var(--en); font-size: 12px; line-height: 1.8; text-shadow: 2px 2px 0 var(--black); margin: 6px 4px 14px; text-transform: uppercase;
+    }
+    .hud b { display: block; font-weight: normal; color: var(--ink); }
+    .hud span { font-family: var(--ko); font-size: 15px; }
+
+    /* 검은 대화창 */
+    .box {
+      background: var(--black); position: relative; padding: 18px 18px; margin: 8px 8px 24px;
+      border: 4px solid #fff; box-shadow: 0 0 0 4px var(--black), 8px 8px 0 4px rgba(0, 0, 0, .35);
+      border-radius: 6px;
+    }
+    .box h2 { margin: 0 0 14px; font-size: 16px; color: var(--yellow); font-family: var(--ko); letter-spacing: 1px; }
+    .box h2::before { content: '▶ '; font-family: var(--en); font-size: 12px; animation: blink 1s steps(1) infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* 버튼 — 두툼한 8비트 버튼 */
+    .pbtn {
+      font: inherit; font-size: 13px; color: #fff; background: var(--red); border: 3px solid var(--black); cursor: pointer;
+      padding: 8px 14px; margin: 4px; text-shadow: 2px 2px 0 rgba(0, 0, 0, .55);
+      box-shadow: inset -3px -3px 0 0 rgba(0, 0, 0, .35), inset 3px 3px 0 0 rgba(255, 255, 255, .35), 3px 3px 0 0 var(--black);
+      text-decoration: none; display: inline-block; white-space: nowrap; position: relative;
+    }
+    .pbtn:hover { filter: brightness(1.1); }
+    .pbtn:active { transform: translate(3px, 3px); box-shadow: inset 3px 3px 0 0 rgba(0, 0, 0, .35); }
+    .pbtn.green { background: var(--green); } .pbtn.blue { background: var(--blue); } .pbtn.red { background: var(--red); }
+    .pbtn.gray { background: #8c8c8c; } .pbtn.yellow { background: var(--yellow); color: var(--black); text-shadow: none; }
+    .pbtn.small { padding: 5px 10px; font-size: 12px; }
+    .pbtn:disabled { opacity: .45; cursor: default; transform: none; }
+    .pin {
+      font: inherit; color: var(--black); background: #fff; border: 3px solid var(--black); padding: 8px 10px; margin: 4px; outline: none;
+      box-shadow: inset 3px 3px 0 0 #c8c8c8;
+    }
+    .pin:focus { background: #fff8d0; }
+    .muted { color: var(--muted); }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+    .top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+    .top h1 {
+      margin: 0; font-family: var(--ko); font-size: 30px; color: #fff; letter-spacing: 2px;
+      text-shadow: 3px 0 0 var(--black), -3px 0 0 var(--black), 0 3px 0 var(--black), 0 -3px 0 var(--black), 5px 5px 0 var(--brick-dark);
+    }
+    .top h1 small { font-family: var(--en); font-size: 10px; display: block; letter-spacing: 3px; margin-top: 6px; text-shadow: 2px 2px 0 var(--black); }
+    .top .sp { flex: 1; }
+
+    .lobby { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+    .roomlist a { display: flex; justify-content: space-between; padding: 10px 6px; border-bottom: 2px dotted #555; text-decoration: none; }
+    .roomlist a:hover { background: #1a1a1a; color: var(--yellow); }
+    .roomlist a:hover::before { content: '▶'; margin-right: 6px; }
+
+    .roomhead { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .roomhead h2 { margin: 0; }
+    .code { font-family: var(--en); background: var(--yellow); color: var(--black); padding: 7px 10px; letter-spacing: 4px; font-size: 15px; border: 3px solid #fff; }
+    .tabs { display: flex; gap: 6px; }
+    .tabs button { font: inherit; font-size: 12px; background: #222; color: #aaa; border: 3px solid #555; padding: 6px 12px; cursor: pointer; }
+    .tabs button.on { background: #fff; color: var(--black); border-color: #fff; }
+
+    #trackWrap { position: relative; margin: 14px -18px -18px; overflow: hidden; border-top: 4px solid #fff; border-radius: 0 0 2px 2px; }
+    #track { display: block; width: 100%; }
+
+    .me-panel { display: grid; grid-template-columns: 240px 1fr; gap: 18px; align-items: center; }
+    .timer { font-family: var(--en); font-size: 34px; color: #fff; text-shadow: 3px 3px 0 var(--red); letter-spacing: 2px; }
+    .bar { height: 14px; background: #222; margin: 10px 0; border: 2px solid #fff; }
+    .bar > i { display: block; height: 100%; width: 0; transition: width 1s linear;
+      background: repeating-linear-gradient(90deg, var(--yellow) 0 8px, #e8a800 8px 10px); }
+
+    /* 순위표 = 최고 점수 화면 */
+    .rank { list-style: none; margin: 0; padding: 0; }
+    .rank li { display: grid; grid-template-columns: 52px 56px 1fr auto; gap: 10px; align-items: center; padding: 8px 4px; border-bottom: 2px dotted #444; }
+    .rank li.me { color: var(--yellow); }
+    .rank li.me::after { content: ''; }
+    .rank .no { font-family: var(--en); font-size: 13px; text-align: center; }
+    .rank li:nth-child(1) .no { color: var(--yellow); } .rank li:nth-child(2) .no { color: #d8d8d8; } .rank li:nth-child(3) .no { color: #e8945c; }
+    .rank .min { font-family: var(--en); font-size: 12px; text-align: right; }
+    .rank .min small { display: block; font-family: var(--ko); font-size: 13px; margin-top: 4px; }
+    .rank .st { font-size: 12px; }
+    .st.run { color: #7cfc7c; } .st.drink { color: #7cc8fc; } .st.sleep { color: #a0a0a0; }
+
+    /* 캐릭터 꾸미기 */
+    .ov { position: fixed; inset: 0; background: rgba(0, 0, 0, .7); display: none; align-items: flex-start; justify-content: center; padding: 30px 12px; overflow: auto; z-index: 50; }
+    .ov.open { display: flex; }
+    .editor { width: 100%; max-width: 740px; }
+    .ed-grid { display: grid; grid-template-columns: 220px 1fr; gap: 18px; }
+    .stage { display: flex; justify-content: center; border: 3px solid #fff; background: #5c8df6; }
+    .stage canvas { width: 100%; max-width: 220px; height: auto; }
+    .opt { margin-bottom: 12px; }
+    .opt > b { display: block; font-size: 12px; color: var(--yellow); margin-bottom: 6px; font-weight: normal; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chips button { font: inherit; font-size: 12px; background: #222; color: #fff; border: 2px solid #666; padding: 5px 9px; cursor: pointer; }
+    .chips button.on { background: #fff; color: var(--black); border-color: #fff; }
+    .chips button.on:not(.sw)::before { content: '▶'; margin-right: 4px; font-size: 10px; }
+    .chips .sw { width: 28px; height: 28px; padding: 0; border: 2px solid #000; box-shadow: 0 0 0 2px #555; }
+    .chips .sw.on { box-shadow: 0 0 0 3px #fff; }
+
+    .toast { position: fixed; left: 50%; bottom: 74px; transform: translateX(-50%); background: var(--black); color: #fff; padding: 12px 16px; z-index: 60;
+      border: 3px solid #fff; box-shadow: 0 0 0 3px var(--black); display: none; }
+    .help { font-size: 12px; line-height: 1.9; }
+
+    @media (max-width: 760px) {
+      .lobby, .me-panel, .ed-grid { grid-template-columns: 1fr; }
+      .top h1 { font-size: 22px; }
+      .hud { grid-template-columns: repeat(2, auto); font-size: 10px; }
+      .rank li { grid-template-columns: 44px 44px 1fr; }
+      .rank li .min { grid-column: 3; text-align: left; }
+      .timer { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <h1>공부 마라톤<small>STUDY RUN</small></h1>
+      <span class="sp"></span>
+      <a class="pbtn small yellow" href="race.html" id="lobbyLink">방 목록</a>
+      <button class="pbtn small blue" id="btnAvatar">🎨 내 캐릭터 꾸미기</button>
+      <a class="pbtn small gray" href="index.html">📅 달력으로</a>
+    </header>
+
+    <!-- 점수판 -->
+    <div class="hud" id="hud">
+      <div>PLAYER<b><span id="hudName">-</span></b></div>
+      <div>TODAY<b id="hudToday">0:00</b></div>
+      <div>WORLD<b><span id="hudWorld">LOBBY</span></b></div>
+      <div>TIME<b id="hudTime">25:00</b></div>
+    </div>
+
+    <!-- 로비: 방 만들기 / 코드로 입장 / 내 방 -->
+    <section id="lobby" hidden>
+      <div class="lobby">
+        <div class="box">
+          <h2>방 만들기</h2>
+          <form id="createForm">
+            <div class="row"><input class="pin" name="name" placeholder="방 이름 (예: 2반 스터디)" maxlength="20" style="flex:1" /></div>
+            <div class="row" style="margin-top:8px">
+              <span>하루 목표</span>
+              <select class="pin" name="goal">
+                <option value="60">1시간</option><option value="120">2시간</option><option value="180">3시간</option>
+                <option value="240" selected>4시간</option><option value="300">5시간</option><option value="360">6시간</option><option value="480">8시간</option>
+              </select>
+              <button class="pbtn green">만들기</button>
+            </div>
+          </form>
+          <p class="muted help">방을 만들면 <b>입장 코드 6자리</b>가 생겨요. 친구에게 코드를 알려 주세요.</p>
+        </div>
+        <div class="box">
+          <h2>코드로 입장</h2>
+          <form id="joinForm" class="row">
+            <input class="pin" name="code" placeholder="입장 코드 6자리" maxlength="6" style="flex:1;text-transform:uppercase;letter-spacing:3px" autocomplete="off" />
+            <button class="pbtn yellow">입장</button>
+          </form>
+          <p class="muted help">처음 입장하면 내 캐릭터를 꾸미고 들어가요. 꾸미기는 나중에도 바꿀 수 있어요.</p>
+        </div>
+      </div>
+      <div class="box">
+        <h2>내가 들어간 방</h2>
+        <div class="roomlist" id="roomList"></div>
+      </div>
+      <div class="box help">
+        <h2>어떻게 달리나요?</h2>
+        • 플래너에서 <b>공부를 완료 체크</b>하거나 <b>집중 타이머</b>를 끝내면 그 시간만큼 앞으로 달려요.<br />
+        • 타이머가 돌아가는 동안엔 <span class="st run">달리는 중</span>, 잠깐 쉬면 <span class="st drink">물 마시는 중</span>, 20분 넘게 쉬면 <span class="st sleep">누워서 자는 중</span>이에요.<br />
+        • 오늘 공부 1시간 🔥, 2시간 🔥🔥, 4시간이면 🔥🔥🔥 — 머리 위 불꽃이 점점 커져요.
+      </div>
+    </section>
+
+    <!-- 방 -->
+    <section id="room" hidden>
+      <div class="box">
+        <div class="roomhead">
+          <h2 id="roomName"></h2>
+          <span class="code" id="roomCode" title="입장 코드"></span>
+          <button class="pbtn small blue" id="copyCode">코드 복사</button>
+          <span class="sp" style="flex:1"></span>
+          <div class="tabs" role="tablist">
+            <button data-view="today" class="on">오늘</button>
+            <button data-view="total">누적</button>
+          </div>
+        </div>
+        <p class="muted" id="roomInfo" style="margin:10px 0 0;font-size:12px"></p>
+        <div id="trackWrap"><canvas id="track"></canvas></div>
+      </div>
+
+      <div class="box">
+        <h2>나도 달리기</h2>
+        <div class="me-panel">
+          <div>
+            <div class="timer" id="tDisp">25:00</div>
+            <div class="bar"><i id="tBar"></i></div>
+            <div class="row">
+              <button class="pbtn small" data-min="25">25분</button>
+              <button class="pbtn small" data-min="50">50분</button>
+            </div>
+          </div>
+          <div>
+            <div class="row">
+              <button class="pbtn green" id="tStart">▶ 공부 시작 (달리기)</button>
+              <button class="pbtn gray" id="tStop">■ 쉬기</button>
+            </div>
+            <p class="muted help" style="margin:8px 0 0">타이머를 끝까지 채우면 그 시간이 오늘 공부에 기록돼요. 플래너의 집중 타이머를 써도 똑같이 달려요.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="box">
+        <h2>순위 (HIGH SCORE)</h2>
+        <ul class="rank" id="rank"></ul>
+      </div>
+
+      <div class="row" style="justify-content:space-between">
+        <span class="muted" style="font-size:12px" id="ownerTools"></span>
+        <button class="pbtn small red" id="leaveBtn">방 나가기</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- 캐릭터 꾸미기 -->
+  <div class="ov" id="edOv">
+    <div class="box editor">
+      <h2 id="edTitle">내 캐릭터 꾸미기</h2>
+      <div class="ed-grid">
+        <div>
+          <div class="stage"><canvas id="edCanvas" width="160" height="220"></canvas></div>
+          <div class="chips" style="margin-top:10px;justify-content:center">
+            <button type="button" data-pose="run" class="on">달리기</button>
+            <button type="button" data-pose="drink">물 마시기</button>
+            <button type="button" data-pose="sleep">잠자기</button>
+          </div>
+        </div>
+        <div id="edOpts"></div>
+      </div>
+      <div class="row" style="justify-content:flex-end;margin-top:12px">
+        <button class="pbtn gray" id="edRandom" type="button">🎲 랜덤</button>
+        <button class="pbtn gray" id="edCancel" type="button">취소</button>
+        <button class="pbtn green" id="edSave" type="button">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="pxToast"></div>
+  <script src="pixel.js"></script>
+  <script src="race.js"></script>
+</body>
+</html>

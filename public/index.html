@@ -165,6 +165,7 @@
       <div class="side-actions">
         <button class="btn primary" id="btnGenerate">✨ 공부 계획 자동 생성</button>
         <a class="btn sage" id="todayLink" target="_blank" rel="opener">📖 오늘 플래너 열기</a>
+        <a class="btn" id="raceLink" href="race.html" target="_blank" rel="opener">🏃 친구와 공부 마라톤</a>
         <button class="btn" id="btnSettings">⚙️ 시험·시간표 설정</button>
         <button class="btn ghost" id="btnHelp">❓ 사용법 보기</button>
         <button class="btn ghost" id="btnLogout">로그아웃</button>
@@ -269,6 +270,14 @@
           <label class="field">시험 범위 — 단원을 쉼표(,)로 구분하면 단원별로 나눠서 계획해요
             <input class="input" name="scope" placeholder="예) 1단원 다항식, 2단원 방정식, 3단원 부등식" maxlength="500" />
           </label>
+          <div class="field" style="margin-bottom:14px">선호 요일 (선택) — 고른 요일에 이 과목을 더 많이 배치해요 <span class="muted">(시험 2일 전부터는 시험 대비가 우선)</span>
+            <div class="daypick" id="prefDays" style="margin-top:6px">
+              <label><input type="checkbox" value="1"><span>월</span></label><label><input type="checkbox" value="2"><span>화</span></label>
+              <label><input type="checkbox" value="3"><span>수</span></label><label><input type="checkbox" value="4"><span>목</span></label>
+              <label><input type="checkbox" value="5"><span>금</span></label><label><input type="checkbox" value="6"><span>토</span></label>
+              <label><input type="checkbox" value="0"><span>일</span></label>
+            </div>
+          </div>
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:18px">
             <label class="muted" style="font-size:13px">색상 <input type="color" name="color" value="#e07a5f" style="vertical-align:middle;border:none;background:none;width:34px;height:26px" /></label>
             <span style="flex:1"></span>
