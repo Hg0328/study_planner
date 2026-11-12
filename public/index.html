@@ -101,6 +101,8 @@
     .cand .input { padding: 4px 2px; font-size: 14px; }
     .cand.nodate input[type=date] { border-bottom-color: var(--sun); background: #fff1ef; }
     .cand.off { opacity: .4; }
+    .cand.nosub input[data-k=subject] { border-bottom-color: var(--sun); background: #fff1ef; }
+    .linkbtn { background: none; border: none; color: var(--accent); text-decoration: underline; cursor: pointer; padding: 0 4px; font-size: 13px; }
     .cand-foot { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
     @media (max-width: 640px) {
       .cand { grid-template-columns: 26px 1fr 1fr 28px; }
@@ -212,6 +214,8 @@
           <div class="quick-head">
             <b>⚡ 시험 범위 빠르게 입력하기</b>
             <span class="chip" id="aiBadge" style="--c:#81b29a">자동 인식</span>
+            <span style="flex:1"></span>
+            <button type="button" class="btn small ghost" id="qReset" hidden>↺ 처음부터 다시</button>
           </div>
           <div class="drop" id="drop" tabindex="0" role="button" aria-label="시험 범위 사진 선택">
             <input type="file" id="imgFile" accept="image/*" hidden />

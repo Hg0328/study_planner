@@ -227,9 +227,9 @@ app.post('/api/exams/extract', auth, h(async (req, res) => {
   const merged = new Map();
   for (const it of items) {
     const subject = normSubject(String(it?.subject || '').trim()).slice(0, 30);
-    if (!subject) continue;
-    const date = isDate(it.date) ? it.date : '';
-    const scope = String(it.scope || '').trim().slice(0, 500);
+    const date = isDate(it?.date) ? it.date : '';
+    const scope = String(it?.scope || '').trim().slice(0, 500);
+    if (!subject) { if (scope) merged.set(`__blank${merged.size}`, { subject: '', date, scope }); continue; }
     const cur = merged.get(subject);
     if (cur) { cur.date ||= date; if (scope) cur.scope = cur.scope ? `${cur.scope}, ${scope}`.slice(0, 500) : scope; }
     else merged.set(subject, { subject, date, scope });

@@ -275,7 +275,19 @@ $('#examList').addEventListener('click', async (e) => {
 // ───────── 시험 범위 빠른 입력 (사진·캡처·글) ─────────
 let cfg = { ai: false };
 let cands = [];
-const qStatus = (html) => { $('#qStatus').innerHTML = html; };
+const qStatus = (html) => { $('#qStatus').innerHTML = html; $('#qReset').hidden = false; };
+let lastUndo = null; // 직전 "모두 추가"를 되돌리기 위한 기록
+
+// 빠른 입력 칸을 처음 상태로
+function resetQuick() {
+  cands = [];
+  $('#qResult').innerHTML = '';
+  $('#qStatus').innerHTML = '';
+  $('#pasteText').value = '';
+  $('#dropPreview').hidden = true; $('#dropPreview').removeAttribute('src');
+  $('#qReset').hidden = true;
+}
+$('#qReset').onclick = resetQuick;
 
 function loadScript(src) {
   return new Promise((res, rej) => {
@@ -370,19 +382,23 @@ function showCands(items, method) {
   cands = items.map((it) => ({ ...it, difficulty: 3, on: true }));
   if (!cands.length) {
     qStatus('');
-    $('#qResult').innerHTML = `<p style="color:var(--sun);font-size:14px">과목을 찾지 못했어요 😥 사진을 더 밝고 선명하게 찍거나, 글 붙여넣기 칸에서 내용을 고친 뒤 다시 찾아보세요.</p>`;
+    $('#qResult').innerHTML = `<p style="color:var(--sun);font-size:14px">과목을 찾지 못했어요 😥 사진을 더 밝고 선명하게 찍거나, 글 붙여넣기 칸에서 내용을 고친 뒤 다시 찾아보세요.
+      <button type="button" class="linkbtn" data-reset>처음부터 다시</button></p>`;
+    $('#qReset').hidden = false;
     return;
   }
-  qStatus(`✅ <b>${cands.length}개 과목</b>을 찾았어요. ${method === 'ai' ? 'AI가 읽은 결과예요.' : '자동 인식 결과예요.'} 날짜와 범위가 맞는지 확인하고 고쳐 주세요.`);
+  const blank = cands.filter((c) => !c.subject).length;
+  qStatus(`✅ <b>${cands.length}개 과목</b>을 찾았어요. ${method === 'ai' ? 'AI가 읽은 결과예요.' : '자동 인식 결과예요.'} 날짜와 범위가 맞는지 확인하고 고쳐 주세요.`
+    + (blank ? ` <span style="color:var(--sun)">과목 이름을 찾지 못한 줄이 있어요 — 빨간 칸에 직접 입력해 주세요.</span>` : ''));
   renderCands();
 }
 function renderCands() {
   const opts = (v) => [1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${n === v ? 'selected' : ''}>${'★'.repeat(n)}</option>`).join('');
   $('#qResult').innerHTML = `<div class="cands">
     <div class="cand head"><span></span><span>과목</span><span>시험 날짜</span><span class="c-diff">난이도</span><span class="c-scope">시험 범위</span><span></span></div>
-    ${cands.map((c, i) => `<div class="cand ${c.date ? '' : 'nodate'} ${c.on ? '' : 'off'}" data-i="${i}">
+    ${cands.map((c, i) => `<div class="cand ${c.date ? '' : 'nodate'} ${c.subject ? '' : 'nosub'} ${c.on ? '' : 'off'}" data-i="${i}">
       <input type="checkbox" data-k="on" ${c.on ? 'checked' : ''} aria-label="추가할지 선택">
-      <input class="input" data-k="subject" value="${esc(c.subject)}" maxlength="30">
+      <input class="input" data-k="subject" value="${esc(c.subject)}" maxlength="30" placeholder="과목 이름">
       <input class="input" type="date" data-k="date" value="${c.date}">
       <select class="input c-diff" data-k="difficulty">${opts(c.difficulty)}</select>
       <input class="input c-scope" data-k="scope" value="${esc(c.scope)}" placeholder="범위 (쉼표로 단원 구분)" maxlength="500">
@@ -390,7 +406,8 @@ function renderCands() {
   </div>
   <div class="cand-foot">
     <button type="button" class="btn small primary" id="candAdd">✔ 선택한 과목 모두 추가</button>
-    <span class="muted" style="font-size:12px">빨간 칸 = 날짜를 못 찾았어요 · 이미 있는 과목은 날짜·범위가 업데이트돼요</span>
+    <button type="button" class="btn small ghost" data-reset>취소</button>
+    <span class="muted" style="font-size:12px">빨간 칸 = 직접 입력이 필요해요 · 이미 있는 과목은 날짜·범위가 업데이트돼요</span>
   </div>`;
 }
 $('#qResult').addEventListener('input', (e) => {
@@ -398,23 +415,47 @@ $('#qResult').addEventListener('input', (e) => {
   const c = cands[+row.dataset.i], k = e.target.dataset.k;
   c[k] = k === 'on' ? e.target.checked : k === 'difficulty' ? +e.target.value : e.target.value;
   row.classList.toggle('nodate', !c.date);
+  row.classList.toggle('nosub', !c.subject.trim());
   row.classList.toggle('off', !c.on);
 });
 $('#qResult').addEventListener('click', async (e) => {
   if (e.target.dataset.rmc !== undefined) { cands.splice(+e.target.dataset.rmc, 1); return cands.length ? renderCands() : showCands([], ''); }
+  if (e.target.dataset.reset !== undefined) return resetQuick();
   if (e.target.id !== 'candAdd') return;
   const pick = cands.filter((c) => c.on);
   if (!pick.length) return toast('추가할 과목을 선택해 주세요');
-  if (pick.some((c) => !c.subject.trim())) return toast('과목 이름이 비어 있는 줄이 있어요');
+  if (pick.some((c) => !c.subject.trim())) return toast('과목 이름이 비어 있는 줄이 있어요 (빨간 칸)');
   if (pick.some((c) => !c.date)) return toast('날짜가 비어 있는 과목이 있어요 (빨간 칸)');
   try {
+    const before = await api('/exams'); // 되돌리기용 스냅샷
     const r = await api('/exams/bulk', { method: 'POST', body: { exams: pick.map(({ subject, date, difficulty, scope }) => ({ subject, date, difficulty, scope })) } });
     exams = await api('/exams');
+    const beforeIds = new Set(before.map((x) => x.id));
+    lastUndo = {
+      added: exams.filter((x) => !beforeIds.has(x.id)).map((x) => x.id),
+      changed: before.filter((b) => { const n = exams.find((x) => x.id === b.id); return n && (n.date !== b.date || n.scope !== b.scope || n.difficulty !== b.difficulty); }),
+    };
     dirty = true;
     renderExamList(); resetExamForm();
-    cands = []; $('#qResult').innerHTML = ''; $('#dropPreview').hidden = true;
-    qStatus(`🎉 ${r.added}개 추가${r.updated ? `, ${r.updated}개 업데이트` : ''}했어요!${r.errors.length ? ` <span style="color:var(--sun)">(${esc(r.errors.join(' / '))})</span>` : ''}`);
+    resetQuick();
+    qStatus(`🎉 ${r.added}개 추가${r.updated ? `, ${r.updated}개 업데이트` : ''}했어요!${r.errors.length ? ` <span style="color:var(--sun)">(${esc(r.errors.join(' / '))})</span>` : ''}
+      <button type="button" class="linkbtn" id="undoBulk">↶ 되돌리기</button>`);
   } catch (err) { toast(err.message); }
+});
+
+// 직전 "모두 추가" 되돌리기: 새로 생긴 과목은 삭제, 바뀐 과목은 원래 값으로
+$('#qStatus').addEventListener('click', async (e) => {
+  if (e.target.id !== 'undoBulk' || !lastUndo) return;
+  e.target.disabled = true;
+  try {
+    for (const id of lastUndo.added) await api('/exams/' + id, { method: 'DELETE' });
+    for (const b of lastUndo.changed) await api('/exams/' + b.id, { method: 'PUT', body: { date: b.date, scope: b.scope, difficulty: b.difficulty } });
+    lastUndo = null;
+    exams = await api('/exams');
+    dirty = true;
+    renderExamList();
+    qStatus('↶ 추가하기 전으로 되돌렸어요.');
+  } catch (err) { toast(err.message); e.target.disabled = false; }
 });
 
 // ───────── 시작 ─────────

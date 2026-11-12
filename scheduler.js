@@ -165,7 +165,8 @@ function interleave(counts) {
   return res;
 }
 
-const splitUnits = (scope) => String(scope || '').split(/[,\n/·]+/).map((x) => x.trim()).filter(Boolean);
+const splitUnits = (scope) => String(scope || '').split(/[,\n/·]+/).map((x) => x.trim()).filter(Boolean)
+  .reduce((acc, u) => { if (acc.length && u.length < 5) acc[acc.length - 1] += `, ${u}`; else acc.push(u); return acc; }, []);
 
 /**
  * @param settings  정리된 설정

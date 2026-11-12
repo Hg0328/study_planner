@@ -8,6 +8,12 @@
 //  - 과목이 없는 다음 줄은 앞 과목의 범위에 이어 붙임
 
 const SUBJECTS = [
+  // 2022 개정 교육과정 과목
+  '역학과 에너지', '전자기와 양자', '물질과 에너지', '화학 반응의 세계', '세포와 물질대사', '생물의 유전',
+  '지구시스템과학', '행성우주과학', '대수', '미적분Ⅰ', '미적분Ⅱ', '독서와 작문', '화법과 언어', '주제 탐구 독서',
+  '문학과 영상', '직무 영어', '영미 문학 읽기', '세계시민과 지리', '사회와 문화', '한국지리 탐구', '동아시아 역사 기행',
+  '법과 사회', '인문학과 윤리', '현대사회와 윤리', '기후변화와 환경생태', '정보과학',
+  // 2015 개정 및 공통
   '확률과 통계', '미적분', '기하', '수학Ⅰ', '수학Ⅱ', '수학1', '수학2', '공통수학1', '공통수학2', '공통수학', '수학',
   '공통국어1', '공통국어2', '공통국어', '문학', '독서', '언어와 매체', '화법과 작문', '국어',
   '공통영어1', '공통영어2', '공통영어', '영어Ⅰ', '영어Ⅱ', '영어1', '영어2', '영어 독해와 작문', '영어',
@@ -85,12 +91,21 @@ function cleanScope(seg) {
     .trim();
 }
 
+// "과목: 역학과 에너지", "교과명 - 국어" 처럼 과목을 직접 적은 줄
+const LABEL_RE = /^(?:과\s*목|교\s*과)\s*명?\s*[:：\-–]\s*(.{1,30}?)\s*(?:[(\[].*)?$/;
+// 번호/기호 머리 ("1.", "가.", "①", "-", "•")
+const MARK_RE = /^\s*(?:\d{1,2}\s*[.)](?!\d)|[가-하]\s*[.)]|[①-⑳]|[-•▪◦*])\s*/;
+// 범위가 아닌 안내 문장 ("~합니다.", "~하세요")
+const NOTICE_RE = /(니다|세요|바랍니다|됩니다)[\s.!)]*$/;
+
 function parseScopeText(text, today) {
   const lines = String(text || '').replace(/\r/g, '').split('\n');
   const map = new Map();
   const order = [];
   let curDate = '';
   let last = null;
+  let section = ''; // "1. 교과서" 같은 소제목
+  const loose = []; // 과목을 못 찾았을 때를 대비해 모아 두는 범위 줄
 
   const upsert = (subject, date, scope) => {
     const key = normSubject(subject);
@@ -100,11 +115,44 @@ function parseScopeText(text, today) {
     if (scope) e.scope = e.scope ? `${e.scope}, ${scope}` : scope;
     return e;
   };
+  // 범위 줄 하나를 정리 (번호 제거, 소제목 붙이기, 안내 문장 제외)
+  let pending = ''; // 소제목 후보 ("1. 교과서") — 다음 줄이 "가." 항목이면 소제목, 아니면 그 자체가 범위
+  const add = (t) => {
+    if (!t) return;
+    if (last) last.scope = last.scope ? `${last.scope}, ${t}` : t;
+    else loose.push(t);
+  };
+  const flush = () => { if (pending) { add(pending); pending = ''; } };
+  const scopeLine = (line) => {
+    if (NOTICE_RE.test(line) && line.length > 12) return;
+    const marked = MARK_RE.test(line);
+    const isSub = /^\s*[가-하]\s*[.)]/.test(line);
+    const t = cleanScope(line.replace(MARK_RE, ''));
+    if (!t) return;
+    if (isSub) {
+      if (pending) { section = pending; pending = ''; }
+      add(section ? `${section} ${t}` : t);
+      return;
+    }
+    flush();
+    section = '';
+    if (marked && t.length <= 12 && !/[:：~\d]/.test(t)) pending = t;
+    else add(t);
+  };
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
-    if (!line) { last = null; continue; }
+    if (!line) continue;
     const dm = findDate(line, today);
+
+    const label = line.match(LABEL_RE);
+    if (label) {
+      flush(); section = '';
+      if (dm) curDate = dm.date;
+      last = upsert(label[1].trim(), dm ? dm.date : curDate, '');
+      continue;
+    }
+
     // 과목명 후보 중 "진짜 과목 표시"만 남기기
     const subs = [];
     for (const m of line.matchAll(SUBJECT_RE)) {
@@ -118,13 +166,16 @@ function parseScopeText(text, today) {
       }
       subs.push(m);
     }
+    // 이미 과목이 정해진 상태에서 번호 매긴 줄 속 과목명(예: "가. 국어 교과서 p.10")은 범위로 취급
+    if (last && MARK_RE.test(line)) subs.length = 0;
 
     if (!subs.length) {
       const rest = cleanScope(line);
-      if (dm && rest.length <= 6) { curDate = dm.date; last = null; continue; } // "11월 24일(화)" 같은 날짜 머리말
-      if (last && rest) last.scope = last.scope ? `${last.scope}, ${rest}` : rest;
+      if (dm && rest.length <= 6) { curDate = dm.date; continue; } // "11월 24일(화)" 같은 날짜 머리말
+      scopeLine(line);
       continue;
     }
+    flush(); section = '';
     if (dm) curDate = dm.date;
     const date = dm ? dm.date : curDate;
     subs.forEach((m, i) => {
@@ -133,7 +184,10 @@ function parseScopeText(text, today) {
       last = upsert(m[0], date, cleanScope(line.slice(from, to)));
     });
   }
-  return order.map((k) => map.get(k));
+  flush();
+  // 과목을 하나도 못 찾았지만 범위 내용은 있으면 → 과목 이름만 비운 채로 돌려줌 (화면에서 입력)
+  if (!order.length && loose.length) return [{ subject: '', date: curDate, scope: loose.join(', ').slice(0, 500) }];
+  return order.map((k) => ({ ...map.get(k), scope: map.get(k).scope.slice(0, 500) }));
 }
 
 module.exports = { parseScopeText, normSubject };
