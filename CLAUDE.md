@@ -47,8 +47,10 @@ README.md        기능·API·배포 방법 문서 (기능을 바꾸면 함께 �
 npm install
 npm start                      # http://localhost:3000 , 로그에 "저장 위치: 파일 (...)"
 PORT=3123 node server.js       # 다른 포트
+npm test                       # 단위 테스트 (node --test → test/*.test.js)
 ```
-- 테스트 프레임워크는 아직 없습니다. 지금까지는 `curl`로 API 흐름(회원가입 → 시험 추가 → /api/generate → /api/day → 체크 → /api/stats)을, Playwright로 화면(로그인, 새 창 열기, 설정, 마라톤 2인 입장)을 확인했습니다.
+- 단위 테스트: Node 내장 `node:test` + `node:assert`만 사용합니다(추가 패키지 없음). `test/scheduler.test.js`(겹침·배정 비중·선호 요일·단계 순서·하루 한도), `test/scopeParser.test.js`(공지 형식·팁 제외·날짜/연도 추정·과목명 인식). 기능을 바꾸면 관련 테스트도 함께 고칩니다.
+- API·화면은 아직 자동 테스트가 없습니다. 지금까지는 `curl`로 API 흐름(회원가입 → 시험 추가 → /api/generate → /api/day → 체크 → /api/stats)을, Playwright로 화면(로그인, 새 창 열기, 설정, 마라톤 2인 입장)을 확인했습니다.
 - Turso 모드 확인: `@libsql/client/web` 대신 같은 API의 `@libsql/client`를 `TURSO_DATABASE_URL=file:/tmp/sim.db`로 붙여 두 모드 결과가 같은지 비교했습니다.
 - 모든 JS 문법 확인: `for f in *.js public/*.js; do node --check $f; done`
 
@@ -79,5 +81,6 @@ PORT=3123 node server.js       # 다른 포트
 - [ ] 저장소가 최신 코드인지 확인 (마지막 전달본: 2026-11-12 백색소음·실시간 전진·생성 버튼 삭제 반영본)
 - [ ] 배포 환경에서 갈무리/Press Start 2P 글꼴이 실제로 로드되는지 확인 (작업 환경에서는 외부 글꼴이 막혀 확인 못 함)
 - [ ] 마라톤 5초 폴링 시 Turso Rows Read 사용량 확인 (무료 한도 여유: 확인 필요)
-- [ ] 자동 테스트 도입 후보: scheduler/scopeParser 단위 테스트(`node --test`), API 흐름 테스트
+- [x] scheduler/scopeParser 단위 테스트 도입 (`npm test`, 2026-11-14)
+- [ ] API 흐름 자동 테스트 (회원가입 → 시험 → 생성 → 체크 → 통계)
 - [ ] 사용자 피드백 대기 중인 기준값: 잠자기 전환 20분, 불꽃 1·2·4시간, 방 최대 10명, 폴링 5초

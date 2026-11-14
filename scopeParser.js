@@ -51,12 +51,17 @@ const DATE_PATTERNS = [
   new RegExp(`(?<![\\d.p])(\\d{1,2})\\.\\s?(\\d{1,2})\\.?(\\s*\\(${WEEK}\\))`),
 ];
 
+// 연도가 없는 날짜: 작년·올해·내년 중 오늘 기준 "60일 전 ~ 305일 후" 범위에 드는 연도 (올해 우선)
+//  예) 1월 초에 본 "12월 30일" → 작년, 12월에 본 "1월 5일" → 내년. 범위에 드는 후보가 없으면 올해
 function inferYear(m, d, today) {
   const [ty, tm, td] = today.split('-').map(Number);
-  let y = ty;
-  const cand = Date.UTC(y, m - 1, d);
-  if (cand < Date.UTC(ty, tm - 1, td) - 60 * 864e5) y += 1; // 두 달 넘게 지난 날짜면 내년으로
-  return y;
+  const now = Date.UTC(ty, tm - 1, td);
+  const lo = now - 60 * 864e5, hi = now + 305 * 864e5;
+  for (const y of [ty, ty - 1, ty + 1]) {
+    const cand = Date.UTC(y, m - 1, d);
+    if (cand >= lo && cand <= hi) return y;
+  }
+  return ty;
 }
 const iso = (y, m, d) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 
