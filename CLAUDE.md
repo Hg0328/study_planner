@@ -51,7 +51,7 @@ npm start                      # http://localhost:3000 , 로그에 "저장 위�
 PORT=3123 node server.js       # 다른 포트
 npm test                       # 단위 테스트 (node --test → test/*.test.js)
 ```
-- 테스트: Node 내장 `node:test` + `node:assert`만 사용합니다(추가 패키지 없음). `test/scheduler.test.js`(겹침·배정 비중·선호 요일·단계 순서·하루 한도), `test/scopeParser.test.js`(공지 형식·팁 제외·날짜/연도 추정·과목명 인식), `test/kinds.test.js`(종류별 단계·우선순위·장기 시험 최소 비중·28일/이어 생성 진도·성능), `test/api.test.js`(서버를 임시 DB·임의 포트로 띄워 API 흐름 확인). 기능을 바꾸면 관련 테스트도 함께 고칩니다.
+- 테스트: Node 내장 `node:test` + `node:assert`만 사용합니다(추가 패키지 없음). `test/scheduler.test.js`(겹침·배정 비중·선호 요일·단계 순서·하루 한도), `test/scopeParser.test.js`(공지 형식·팁 제외·날짜/연도 추정·과목명 인식), `test/kinds.test.js`(종류별 단계·우선순위·장기 시험 최소 비중·28일/이어 생성 진도·성능), `test/api.test.js`(서버를 임시 DB·임의 포트로 띄워 API 흐름 확인), `test/migration.test.js`(서버를 다시 켜도 데이터 정리 마이그레이션이 한 번만 도는지). 기능을 바꾸면 관련 테스트도 함께 고칩니다.
 - Turso 모드로 API 테스트: `db.js`의 `@libsql/client/web`을 잠시 `@libsql/client`로 바꾸고 `SIM_TURSO=file:/tmp/sim.db node --test test/api.test.js` (확인 후 되돌리기).
 - 화면은 자동 테스트가 없습니다. 지금까지는 `curl`로 API 흐름(회원가입 → 시험 추가 → /api/generate → /api/day → 체크 → /api/stats)을, Playwright로 화면(로그인, 새 창 열기, 설정, 마라톤 2인 입장)을 확인했습니다.
 - Turso 모드 확인: `@libsql/client/web` 대신 같은 API의 `@libsql/client`를 `TURSO_DATABASE_URL=file:/tmp/sim.db`로 붙여 두 모드 결과가 같은지 비교했습니다.
@@ -73,7 +73,11 @@ npm test                       # 단위 테스트 (node --test → test/*.test.j
 
 13. **생활 유형·시험 종류 규칙은 `public/presets.js` 한 곳에서만 고칩니다** (서버·화면 공용). 내신 단계 제목은 기존 형식(`[개념] 1단원 — 교과서·필기 정리`)을 유지합니다. `settings.school` 칸 이름은 그대로 두고 화면 문구만 생활 유형에 따라 바꿉니다(학교/강의/고정 일정/근무).
 14. **계획은 오늘부터 최대 28일치만 저장**(`users.plan_until`, `plan_from`). 남은 기간 < 14일이면 화면이 `Plan.ensure()` → `/api/generate {mode:'extend'}`. 계산은 항상 마지막 시험일까지 끝까지(`scheduler.buildPlan`) 해서 단계 비율과 `exams.expected_min`(과목별 진행률 분모)을 정합니다. 지우기·넣기·expected_min·plan_until 갱신은 한 `db.batch`로 묶습니다. 진도: 재생성 = 완료 수, 이어 생성 = 완료 수 + (plan_from ~ 이어 생성 시작 전날) 미완료 자동 공부 수.
+    - 진도 번호는 `plan_from`부터 셉니다. 놓친(체크 안 한) 과거 할 일은 이어 생성 때 다시 배치되지 않고, 플래너의 「내일부터 계획 다시 짜기」(재생성 → 진도 = 완료 수)로 재배치됩니다.
+    - 기존 계정은 `plan_until`이 비어 있어 첫 접속 때(`/api/plan`의 `needsRegen`) 오늘 이후 자동 할 일이 28일치로 다시 만들어집니다.
 15. 같은 과목명이라도 시험 종류가 다르면 별도 시험(bulk 업데이트 판단도 과목명+종류). "수학 · 수능" 표시는 등록한 종류가 2개 이상일 때만(`Presets.showKinds`).
+
+16. 선호 요일(`pref_days`)은 빈 문자열을 숫자로 바꾸기 전에 거릅니다(`Number('') === 0` → 일요일 버그). 예전 데이터 정리(`pref_days='0'` → `''`)는 `meta.mig_pref_days_0` 기록으로 **한 번만** 실행됩니다 — MIGRATIONS는 서버를 켤 때마다 다시 실행되므로, 데이터를 고치는 UPDATE는 이렇게 한 번만 돌게 만들어야 합니다.
 
 ## 환경 변수
 `PORT`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `DB_PATH`, `JWT_SECRET`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`(기본 claude-sonnet-5-5), `AI_DAILY_LIMIT`(기본 20).

@@ -59,9 +59,30 @@ test('API: 같은 과목명이라도 종류가 다르면 별도 시험 (bulk 포
   await assert.rejects(api('/exams', { method: 'POST', body: { subject: 'X', date: '2027-01-01', kind: 'custom', stages: [{ name: '하나', ratio: 100 }] } }), /직접 설정 단계/);
 });
 
+test('API: 선호 요일을 안 보내면 빈 값으로 저장 (일요일 "0"으로 저장되던 버그)', async () => {
+  const exams = await api('/exams');
+  // 위에서 pref_days 없이 POST한 시험 2개 + bulk로 추가한 영어 모두 ''
+  assert.deepEqual(exams.map((e) => e.pref_days), ['', '', '']);
+  const r = await api('/exams', { method: 'POST', body: { subject: '선호없음', date: '2027-01-05', pref_days: '' } });
+  assert.equal(r.pref_days, '');
+  const sun = await api('/exams', { method: 'POST', body: { subject: '일요일만', date: '2027-01-05', pref_days: [0] } });
+  assert.equal(sun.pref_days, '0'); // 진짜 일요일 선택은 그대로
+  const both = await api('/exams', { method: 'POST', body: { subject: '주말', date: '2027-01-05', pref_days: '6,0,' } });
+  assert.equal(both.pref_days, '0,6');
+  for (const id of [r.id, sun.id, both.id]) await api('/exams/' + id, { method: 'DELETE' });
+});
+
+test('API: plan_until이 빈 계정(기존 계정)은 첫 접속 때 다시 생성이 필요하다고 알려 줌', async () => {
+  const st = await api(`/plan?today=${T}`);
+  assert.equal(st.planUntil, '');
+  assert.equal(st.needsRegen, true);
+  assert.equal(st.needsExtend, false);
+});
+
 test('API: 28일까지만 생성 → 이어 생성 → 한 번에 생성한 결과와 같음, plan_until 갱신', async () => {
   const r1 = await api('/generate', { method: 'POST', body: { startDate: T, today: T } });
   assert.equal(r1.planUntil, S.addDays(T, 27));
+  assert.equal((await api(`/plan?today=${T}`)).needsRegen, false);
   assert.equal(r1.lastExam, '2027-02-20');
   // 아직 14일 넘게 남음 → 이어 생성 필요 없음
   assert.equal((await api(`/plan?today=${S.addDays(T, 13)}`)).needsExtend, false);

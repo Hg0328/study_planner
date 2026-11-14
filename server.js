@@ -129,7 +129,8 @@ function cleanExam(b, fallbackColor) {
   const color = /^#[0-9a-f]{6}$/i.test(b.color || '') ? b.color : fallbackColor;
   // 선호 요일 (0=일 ~ 6=토) → "1,3" 형태로 저장
   const rawDays = Array.isArray(b.pref_days) ? b.pref_days : String(b.pref_days || '').split(',');
-  const pref_days = [...new Set(rawDays.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6) )].sort().join(',');
+  // 빈 문자열은 숫자로 바꾸기 전에 거름 (Number('') === 0 → 일요일로 저장되던 버그)
+  const pref_days = [...new Set(rawDays.filter((d) => String(d ?? '').trim() !== '').map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6) )].sort().join(',');
   const kind = P.KIND_IDS.includes(b.kind) ? b.kind : 'naesin';
   const priority = P.PRIORITY_IDS.includes(b.priority) ? b.priority : 'normal';
   let stages = '';
@@ -344,9 +345,10 @@ app.get('/api/plan', auth, h(async (req, res) => {
   if (!isDate(today)) return bad(res, '날짜가 올바르지 않아요');
   const pu = (await db.get('SELECT plan_until FROM users WHERE id=?', [req.uid]))?.plan_until || '';
   const last = (await db.get('SELECT MAX(date) d FROM exams WHERE user_id=?', [req.uid]))?.d || '';
-  // plan_until이 비어 있으면 = 이 기능 전에 끝까지 생성했거나 아직 생성 전 → 이어 생성하지 않음
   const needsExtend = !!pu && last > pu && S.diffDays(today, pu) < EXTEND_BELOW;
-  res.json({ planUntil: pu, lastExam: last, needsExtend, planDays: PLAN_DAYS, extendBelow: EXTEND_BELOW });
+  // plan_until이 비어 있음 = 28일 생성 기능 전의 계정 → 남은 시험이 있으면 오늘부터 28일치로 다시 생성
+  const needsRegen = !pu && last >= today;
+  res.json({ planUntil: pu, lastExam: last, needsExtend, needsRegen, planDays: PLAN_DAYS, extendBelow: EXTEND_BELOW });
 }));
 
 // ── 캘린더 요약 ──
