@@ -17,6 +17,12 @@ const QUOTES = [
   '작은 체크 하나가 모여 큰 점수가 된다.',
 ];
 
+// 할 일의 과목 표시 ("수학 · 수능" — 시험 종류가 2개 이상일 때)
+function taskName(t, fallback) {
+  const e = t.exam_id && data.exams.find((x) => x.id === t.exam_id);
+  return e ? examName(e, data.exams) : t.subject || fallback;
+}
+
 async function load() {
   data = await api('/day/' + date);
   render();
@@ -34,7 +40,7 @@ function render() {
 
   $('#ddays').innerHTML = data.exams
     .filter((e) => e.date >= date)
-    .map((e) => `<span class="chip" style="--c:${e.color}">${esc(e.subject)} ${dday(D.diff(date, e.date))}</span>`)
+    .map((e) => `<span class="chip" style="--c:${e.color}">${esc(examName(e, data.exams))} ${dday(D.diff(date, e.date))}</span>`)
     .join('') || '<span class="muted" style="font-size:13px">남은 시험이 없어요 🎉</span>';
 
   renderTimeline();
@@ -54,7 +60,7 @@ function renderPrint() {
   $('#printSheet').innerHTML = `
     <div class="ps-head">
       <div class="ps-date">${D.pretty(date)}</div>
-      <div class="ps-dd">${upcoming.slice(0, 6).map((e) => `<b>${esc(e.subject)} ${dday(D.diff(date, e.date))}</b>`).join('')}</div>
+      <div class="ps-dd">${upcoming.slice(0, 6).map((e) => `<b>${esc(examName(e, data.exams))} ${dday(D.diff(date, e.date))}</b>`).join('')}</div>
     </div>
     <div class="ps-meta">할 일 ${data.tasks.length}개 · 계획 공부 ${fmtMin(planMin)}${fixed ? ` · 고정 일정: ${esc(fixed)}` : ''}</div>
     ${data.tasks.length ? `<table class="ps">
@@ -62,7 +68,7 @@ function renderPrint() {
       <tbody>${data.tasks.map((t) => `<tr class="${t.done ? 'ps-done' : ''}">
         <td><span class="ps-box ${t.done ? 'on' : ''}"></span></td>
         <td class="ps-time">${t.start != null ? `${toHM(t.start)}–${toHM(t.end)}` : '자유'}</td>
-        <td class="ps-sub" style="--c:${t.color || (t.kind === 'review' ? '#b48ead' : '#9a8c98')}">${esc(t.subject || '기타')}</td>
+        <td class="ps-sub" style="--c:${t.color || (t.kind === 'review' ? '#b48ead' : '#9a8c98')}">${esc(taskName(t, '기타'))}</td>
         <td><span class="ps-title">${esc(t.title)}</span>${t.note ? `<span class="ps-note">📝 ${esc(t.note)}</span>` : ''}</td>
       </tr>`).join('')}</tbody></table>` : '<p>계획된 할 일이 없어요.</p>'}
     <div class="ps-memo"><b>메모 · 회고 ${data.memo.mood || ''}</b><div class="ps-lines">${esc(data.memo.text || '')}</div></div>`;
@@ -95,7 +101,7 @@ function renderTimeline() {
   for (const t of timed) {
     const c = t.color || (t.kind === 'review' ? '#b48ead' : '#9a8c98');
     html += `<div class="blk ${t.done ? 'done' : ''} ${(t.end - t.start) < 40 ? 'tiny' : ''}" data-id="${t.id}" style="--c:${c};top:${(t.start - base) * PX}px;height:${Math.max(16, (t.end - t.start) * PX - 2)}px" title="클릭해서 완료 체크">
-      <b>${toHM(t.start)}</b>${esc(t.subject || '')} · ${esc(t.title)}</div>`;
+      <b>${toHM(t.start)}</b>${esc(taskName(t, ''))} · ${esc(t.title)}</div>`;
   }
   if (date === D.today()) {
     const n = new Date(), m = n.getHours() * 60 + n.getMinutes();
@@ -123,7 +129,7 @@ function renderTodos() {
       <div class="tbody">
         <div class="ttop">
           <span>${t.start != null ? `${toHM(t.start)} – ${toHM(t.end)}` : '시간 자유'}</span>
-          <span class="chip" style="--c:${c}">${esc(t.subject || '기타')}</span>
+          <span class="chip" style="--c:${c}">${esc(taskName(t, '기타'))}</span>
           <span class="kind">${KIND[t.kind] || ''}</span>
         </div>
         <div class="ttitle">${esc(t.title)}</div>
@@ -136,10 +142,12 @@ function renderTodos() {
         <button data-act="del" title="삭제">✕</button>
       </div></li>`;
   }).join('') || `<li class="empty-todo"><div class="hand" style="font-size:calc(28px * var(--hand-scale))">${data.tasks.length ? '모두 완료! 수고했어요 🎉' : '이 날은 계획된 공부가 없어요'}</div>
-    ${data.tasks.length ? '' : '<p style="font-size:13px">달력 화면에서 「공부 계획 자동 생성」을 누르거나, 아래에서 직접 추가해 보세요.</p>'}</li>`;
+    ${data.tasks.length ? '' : data.planUntil && date > data.planUntil
+      ? '<p style="font-size:13px">계획은 오늘부터 4주씩 만들어져요. 이 날짜가 가까워지면 자동으로 이어서 만들어져요.</p>'
+      : '<p style="font-size:13px">설정 창에서 시험을 등록하면 계획이 자동으로 만들어져요. 아래에서 직접 추가해도 돼요.</p>'}</li>`;
 
   $('#addForm').exam_id.innerHTML = `<option value="">기타</option>` +
-    data.exams.filter((e) => e.date >= date).map((e) => `<option value="${e.id}">${esc(e.subject)}</option>`).join('');
+    data.exams.filter((e) => e.date >= date).map((e) => `<option value="${e.id}">${esc(examName(e, data.exams))}</option>`).join('');
 }
 
 $('#todos').addEventListener('change', (e) => {
@@ -203,7 +211,7 @@ $('#addForm').onsubmit = async (e) => {
 $('#replan').onclick = async (e) => {
   e.target.disabled = true;
   try {
-    const r = await api('/generate', { method: 'POST', body: { startDate: D.add(D.today(), 1) } });
+    const r = await api('/generate', { method: 'POST', body: { startDate: D.add(D.today(), 1), today: D.today() } });
     toast(`🔄 내일부터 ${fmtMin(r.studyMin)} 분량으로 다시 짰어요`, 3000);
     changed();
   } catch (err) { toast(err.message); }
@@ -251,7 +259,7 @@ const timer = { total: 25 * 60, left: 25 * 60, run: false, iv: null, isBreak: fa
 function renderTimerTasks() {
   const sel = $('#timerTask'), cur = sel.value;
   sel.innerHTML = '<option value="">집중할 할 일 선택 (선택)</option>' +
-    data.tasks.filter((t) => !t.done).map((t) => `<option value="${t.id}">${esc(t.subject || '')} · ${esc(t.title)}</option>`).join('');
+    data.tasks.filter((t) => !t.done).map((t) => `<option value="${t.id}">${esc(taskName(t, ''))} · ${esc(t.title)}</option>`).join('');
   sel.value = cur;
 }
 function drawTimer() {
@@ -350,7 +358,8 @@ function plannerTour() {
 }
 $('#plHelp').onclick = plannerTour;
 
-load().then(() => {
+load().then(async () => {
   drawTimer();
+  if (await Plan.ensure()) await load();
   if (!localStorage.getItem('sp_tour_planner')) { localStorage.setItem('sp_tour_planner', '1'); plannerTour(); }
 }).catch((e) => toast(e.message));

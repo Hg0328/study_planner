@@ -73,6 +73,27 @@ const sync = 'BroadcastChannel' in window ? new BroadcastChannel('study-planner'
 function notifyChange() { sync && sync.postMessage({ type: 'changed', at: Date.now() }); }
 function onChange(fn) { sync && sync.addEventListener('message', (e) => e.data?.type === 'changed' && fn()); }
 
+// 계획 이어 생성: 만들어 둔 기간이 14일 미만으로 남으면 다음 28일치를 이어서 생성 (달력·플래너를 열 때)
+const Plan = {
+  busy: null,
+  ensure() {
+    if (this.busy) return this.busy;
+    this.busy = (async () => {
+      try {
+        const today = D.today();
+        const st = await api('/plan?today=' + today);
+        if (!st.needsExtend) return false;
+        await api('/generate', { method: 'POST', body: { mode: 'extend', today } });
+        notifyChange();
+        return true;
+      } catch { return false; } finally { setTimeout(() => (Plan.busy = null), 0); }
+    })();
+    return this.busy;
+  },
+};
+// "수학 · 수능" (등록한 시험 종류가 2개 이상일 때만 종류를 붙임)
+const examName = (e, all) => (window.Presets ? Presets.examLabel(e, all) : e.subject);
+
 function toast(msg, ms = 2200) {
   let el = document.getElementById('toast');
   if (!el) { el = document.createElement('div'); el.id = 'toast'; document.body.appendChild(el); }
