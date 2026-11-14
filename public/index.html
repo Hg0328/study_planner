@@ -30,6 +30,10 @@
     .prog { margin-bottom: 10px; font-size: 13px; }
     .prog .row { display: flex; justify-content: space-between; margin-bottom: 3px; }
     .prog-sub { font-size: 12px; margin-top: 2px; text-align: right; }
+    .prog-dd { font-size: 11px; margin-right: 4px; }
+    .prog.past { opacity: .45; }
+    .prog-kind { font-size: 12px; color: var(--muted); margin: 14px 0 6px; padding-bottom: 3px; border-bottom: 1px dashed var(--line); }
+    .prog-group:first-child .prog-kind { margin-top: 0; }
     .bar { height: 9px; background: var(--track); border-radius: 99px; overflow: hidden; }
     .bar > i { display: block; height: 100%; background: var(--c, var(--sage)); border-radius: 99px; transition: width .4s; }
     .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 22px; }
@@ -156,7 +160,7 @@
       <h3 class="section-title"><span class="hl">D-Day</span></h3>
       <ul class="dlist" id="dlist"></ul>
 
-      <h3 class="section-title"><span class="hl">과목별 진행률</span></h3>
+      <h3 class="section-title"><span class="hl">시험별 진행률</span></h3>
       <div id="progList"></div>
       <div class="stat-row">
         <div class="stat"><b id="stPct">0%</b><span>전체 달성률</span></div>

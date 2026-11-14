@@ -41,6 +41,11 @@ test('presets: 직접 설정 단계 정리 (2~4개, 비율 합 100으로 맞춤)
   assert.equal(st.reduce((a, s) => a + s.ratio, 0), 100);
   assert.equal(P.examLabel({ subject: '수학', kind: 'suneung' }, [{ kind: 'naesin' }, { kind: 'suneung' }]), '수학 · 수능');
   assert.equal(P.examLabel({ subject: '수학', kind: 'naesin' }, [{ kind: 'naesin' }, { kind: 'naesin' }]), '수학'); // 종류 1개면 안 붙임
+  // 직접 설정은 화면에서 "· 기타", 진행률 소제목은 "기타 시험"
+  assert.equal(P.examLabel({ subject: '한국사능력검정', kind: 'custom' }, [{ kind: 'naesin' }, { kind: 'custom' }]), '한국사능력검정 · 기타');
+  assert.equal(P.kindGroupLabel('custom'), '기타 시험');
+  assert.equal(P.kindGroupLabel('suneung'), '수능·모의고사');
+  assert.equal(P.kindGroupLabel(undefined), '내신');
 });
 
 test('종류별 단계 이름과 비율대로 할 일이 배정된다 (직접 설정 포함)', () => {

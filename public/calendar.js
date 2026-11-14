@@ -98,18 +98,37 @@ async function renderSide() {
   }).join('') || '<li class="muted" style="font-size:13px">등록된 시험이 없어요</li>';
 
   const st = await api('/stats?today=' + today);
-  $('#progList').innerHTML = st.subjects.map((s) => {
-    // 분모 = 생성 때 시험일까지 계산한 예상 전체 공부 시간 (예전 계획이면 저장된 계획 시간)
-    const exp = s.expected_min || s.planMin;
-    const pct = exp ? Math.min(100, Math.round((s.doneMin / exp) * 100)) : 0;
-    return `<div class="prog"><div class="row"><span>${esc(examName(s, exams))}</span>
-      <span class="muted">${pct}%</span></div>
-      <div class="bar"><i style="width:${pct}%;--c:${s.color}"></i></div>
-      <div class="muted prog-sub">완료 ${fmtMin(s.doneMin)} / 예상 전체 ${fmtHours(exp)}</div></div>`;
-  }).join('') || '<p class="muted" style="font-size:13px">계획을 만들면 여기서 진행률을 볼 수 있어요</p>';
+  $('#progList').innerHTML = renderProgress(st.subjects, today);
   $('#stPct').textContent = (st.total ? Math.round((st.done / st.total) * 100) : 0) + '%';
   $('#stStreak').textContent = st.streak + '일';
   $('#stFocus').textContent = fmtMin(st.focusMin);
+}
+
+// 시험별 진행률: 한 줄 = 시험(과목+종류). 종류가 2개 이상이면 종류별로 묶고 소제목 아래에 과목명만
+//  묶음 안은 시험 날짜가 가까운 순(지난 시험은 맨 뒤), 묶음 순서도 가장 가까운 시험 기준
+function renderProgress(list, today) {
+  if (!list.length) return '<p class="muted" style="font-size:13px">계획을 만들면 여기서 진행률을 볼 수 있어요</p>';
+  // 다가오는 시험 먼저(가까운 순), 지난 시험은 뒤에(최근 순)
+  const near = (a, b) => {
+    const ua = a.date >= today, ub = b.date >= today;
+    if (ua !== ub) return ua ? -1 : 1;
+    return ua ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date);
+  };
+  const row = (s, name) => {
+    // 분모 = 생성 때 시험일까지 계산한 예상 전체 공부 시간 (예전 계획이면 저장된 계획 시간)
+    const exp = s.expected_min || s.planMin;
+    const pct = exp ? Math.min(100, Math.round((s.doneMin / exp) * 100)) : 0;
+    return `<div class="prog ${s.date < today ? 'past' : ''}"><div class="row"><span>${esc(name)}</span>
+      <span class="muted"><small class="prog-dd">${dday(D.diff(today, s.date))}</small> ${pct}%</span></div>
+      <div class="bar"><i style="width:${pct}%;--c:${s.color}"></i></div>
+      <div class="muted prog-sub">완료 ${fmtMin(s.doneMin)} / 예상 전체 ${fmtHours(exp)}</div></div>`;
+  };
+  const sorted = [...list].sort(near);
+  if (!Presets.showKinds(list)) return sorted.map((s) => row(s, s.subject)).join('');
+  const groups = new Map(); // 가까운 시험이 있는 종류부터
+  for (const s of sorted) { const k = s.kind || 'naesin'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(s); }
+  return [...groups].map(([k, items]) => `<div class="prog-group"><div class="prog-kind">${esc(Presets.kindGroupLabel(k))}</div>
+    ${items.map((s) => row(s, s.subject)).join('')}</div>`).join('');
 }
 
 async function refresh() {
@@ -613,7 +632,7 @@ function startTour(isNew = false) {
     { el: null, title: '반가워요! 👋', text: `시험 날짜와 ${fixedName()}·학원 시간만 넣으면 <b>시험 공부 계획을 자동으로</b> 짜 주는 플래너예요. 사용법을 1분 안에 알려 드릴게요.` },
     { el: '#btnSettings', title: '① 시험·시간표 입력', text: `여기서 <b>시험 과목·날짜</b>와 <b>${fixedName()}·학원 시간</b>, 기상·취침 시간을 넣어요. 창을 닫으면 <b>공부 계획이 자동으로</b> 만들어져요.<br>시험 범위는 공지 <b>사진·캡처를 올리거나 글을 붙여넣으면</b> 과목별로 자동 정리돼요.` },
     { el: '#cal', title: '② 달력에서 날짜 누르기', text: '날짜를 누르면 <b>그날의 플래너가 새 창</b>으로 열려요. 할 일을 체크하면 이 달력에도 바로 반영되고, 다 끝낸 날엔 도장이 찍혀요.' },
-    { el: '#bigDday', title: '③ D-Day와 진행률', text: '가장 가까운 시험까지 남은 날, 과목별로 얼마나 공부했는지, 며칠 연속 공부했는지 여기서 볼 수 있어요.' },
+    { el: '#bigDday', title: '③ D-Day와 진행률', text: '가장 가까운 시험까지 남은 날, 시험별로 얼마나 공부했는지, 며칠 연속 공부했는지 여기서 볼 수 있어요.' },
     { el: '#raceLink', title: '④ 친구와 공부 마라톤', text: '방을 만들고 <b>입장 코드</b>를 친구에게 알려 주면 같이 달릴 수 있어요. 공부한 만큼 내 픽셀 캐릭터가 앞으로 달리고, 많이 할수록 머리에 불이 붙어요 🔥' },
     { el: '#btnSettings', title: '⑤ 내 맘대로 꾸미기', text: '설정 창의 <b>🎨 꾸미기</b> 탭에서 색 테마(벚꽃·민트·밤 등), 큰 글씨 글꼴, 화면 크기를 바꿀 수 있어요.' },
     { el: '#btnHelp', title: '언제든 다시 보기', text: '사용법이 궁금하면 이 버튼을 눌러 주세요. 이제 시험부터 등록해 볼까요?' },
