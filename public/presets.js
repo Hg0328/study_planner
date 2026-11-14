@@ -84,7 +84,7 @@
       ],
     },
     custom: {
-      label: '직접 설정', unit: '항목', unitEx: '항목1, 항목2, 항목3',
+      label: '직접 설정', short: '기타', group: '기타 시험', unit: '항목', unitEx: '항목1, 항목2, 항목3',
       suggest: [],
       stages: null, // 시험마다 사용자 입력 (exams.stages)
     },
@@ -124,6 +124,8 @@
   }
 
   const kindLabel = (kind) => { const k = EXAM_KINDS[kind] || EXAM_KINDS.naesin; return k.short || k.label; };
+  // 진행률 묶음 소제목 (예: "수능·모의고사", 직접 설정은 "기타 시험")
+  const kindGroupLabel = (kind) => { const k = EXAM_KINDS[kind] || EXAM_KINDS.naesin; return k.group || k.label; };
   // 등록한 시험 종류가 2개 이상일 때만 "수학 · 수능"처럼 종류를 붙임
   const showKinds = (exams) => new Set((exams || []).map((e) => e.kind || 'naesin')).size >= 2;
   const examLabel = (exam, exams) => (showKinds(exams) ? `${exam.subject} · ${kindLabel(exam.kind)}` : exam.subject);
@@ -131,7 +133,7 @@
   const Presets = {
     LIFE_TYPES, EXAM_KINDS, PRIORITY, LONG_TERM_DAYS, LONG_TERM_OFF_DAYS,
     LIFE_IDS: Object.keys(LIFE_TYPES), KIND_IDS: Object.keys(EXAM_KINDS), PRIORITY_IDS: Object.keys(PRIORITY),
-    cleanStages, stagesFor, kindLabel, showKinds, examLabel,
+    cleanStages, stagesFor, kindLabel, kindGroupLabel, showKinds, examLabel,
     fixedLabel: (lifeType) => (LIFE_TYPES[lifeType] || LIFE_TYPES.student).fixedLabel,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Presets;
