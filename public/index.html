@@ -7,6 +7,7 @@
   <meta name="theme-color" content="#ece5d6" />
   <link rel="stylesheet" href="style.css" />
   <script src="common.js"></script>
+  <script src="presets.js"></script>
   <style>
     .book { max-width: 1320px; margin: 28px auto; padding: 0 18px; display: grid; grid-template-columns: 310px 1fr; }
     .book > .left { border-radius: var(--radius) 0 0 var(--radius); padding: 30px 26px; border-right: 1px solid var(--line); }
@@ -28,6 +29,7 @@
 
     .prog { margin-bottom: 10px; font-size: 13px; }
     .prog .row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+    .prog-sub { font-size: 12px; margin-top: 2px; text-align: right; }
     .bar { height: 9px; background: var(--track); border-radius: 99px; overflow: hidden; }
     .bar > i { display: block; height: 100%; background: var(--c, var(--sage)); border-radius: 99px; transition: width .4s; }
     .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 22px; }
@@ -211,6 +213,23 @@
     </form>
   </div>
 
+  <!-- 가입 직후: 생활 유형 · 시험 종류 선택 -->
+  <div class="overlay" id="onbOv">
+    <div class="paper modal onb">
+      <div class="tape"></div>
+      <div class="modal-head">
+        <h2 class="section-title" style="margin:0"><span class="hl" id="onbTitle">어떤 생활을 하고 있나요?</span></h2>
+        <span class="muted" id="onbStep" style="font-size:13px">1 / 2</span>
+      </div>
+      <p class="muted" id="onbDesc" style="font-size:13px;margin:0 0 14px">고른 생활에 맞춰 기본 시간표를 넣어 드려요. 설정 창에서 언제든 바꿀 수 있어요.</p>
+      <div id="onbBody"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px;border-top:1px dashed var(--line);padding-top:16px">
+        <button type="button" class="btn ghost" id="onbBack" hidden>← 이전</button>
+        <button type="button" class="btn primary" id="onbNext" disabled>다음 →</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 설정 -->
   <div class="overlay" id="setOv">
     <div class="paper modal">
@@ -221,7 +240,7 @@
       </div>
       <div class="tabs" id="tabs">
         <button data-tab="exam" class="on">📝 시험 과목</button>
-        <button data-tab="school">🏫 학교 시간</button>
+        <button data-tab="school" id="tabSchool">🏫 학교 시간</button>
         <button data-tab="academy">🎒 학원</button>
         <button data-tab="life">🌙 생활 패턴</button>
         <button data-tab="look">🎨 꾸미기</button>
@@ -257,6 +276,18 @@
         <form id="examForm">
           <input type="hidden" name="id" />
           <div class="grid3">
+            <label class="field">시험 종류<select class="input" name="kind" id="examKind"></select></label>
+            <label class="field">우선순위 (난이도와 별개)
+              <select class="input" name="priority">
+                <option value="high">높음 — 더 많이</option><option value="normal" selected>보통</option><option value="low">낮음 — 덜</option>
+              </select>
+            </label>
+            <div class="field">추천 과목 <span class="muted">(누르면 입력)</span><div class="suggest" id="suggest"></div></div>
+          </div>
+          <label class="field" id="stagesRow" hidden>공부 단계 — "이름:비율"을 쉼표로 2~4개 (예: 이론:40, 문제풀이:40, 정리:20)
+            <input class="input" name="stages" placeholder="이론:40, 문제풀이:40, 정리:20" maxlength="120" />
+          </label>
+          <div class="grid3">
             <label class="field">과목<input class="input" name="subject" placeholder="예) 수학" required maxlength="30" /></label>
             <label class="field">시험 날짜<input class="input" name="date" type="date" required /></label>
             <label class="field">난이도 (어려울수록 시간 ↑)
@@ -266,7 +297,7 @@
               </select>
             </label>
           </div>
-          <label class="field">시험 범위 — 단원을 쉼표(,)로 구분하면 단원별로 나눠서 계획해요
+          <label class="field"><span id="scopeLabel">시험 범위 — 단원을 쉼표(,)로 구분하면 단원별로 나눠서 계획해요</span>
             <input class="input" name="scope" placeholder="예) 1단원 다항식, 2단원 방정식, 3단원 부등식" maxlength="500" />
           </label>
           <div class="field" style="margin-bottom:14px">선호 요일 (선택) — 고른 요일에 이 과목을 더 많이 배치해요 <span class="muted">(시험 2일 전부터는 시험 대비가 우선)</span>
@@ -288,11 +319,17 @@
       </div>
 
       <div class="tab-pane" data-pane="school">
+        <div class="field" style="margin-bottom:12px">생활 유형 <span class="muted">— 바꾸면 기본 시간표로 바꿀지 물어봐요</span>
+          <div class="pick-row" id="lifePick" style="margin-top:6px"></div>
+        </div>
+        <div class="field" style="margin-bottom:18px">준비하는 시험 종류 (여러 개) <span class="muted">— 시험 추가 칸의 기본 선택지·추천 과목에 쓰여요</span>
+          <div class="pick-row" id="kindPick" style="margin-top:6px"></div>
+        </div>
         <table class="week" id="schoolTable">
-          <thead><tr><th>요일</th><th>등교</th><th>시작</th><th>끝</th></tr></thead>
+          <thead><tr><th>요일</th><th id="schoolOnTh">등교</th><th>시작</th><th>끝</th></tr></thead>
           <tbody></tbody>
         </table>
-        <h4 style="margin:22px 0 6px">시험 당일 학교 시간</h4>
+        <h4 style="margin:22px 0 6px" id="examDayTitle">시험 당일 학교 시간</h4>
         <p class="muted" style="font-size:13px;margin:0 0 8px">시험 날은 보통 일찍 끝나니까, 남은 오후는 다음 시험 공부에 배정돼요.</p>
         <div class="grid2">
           <label class="field">시작<input class="input" type="time" id="examDayStart" /></label>
@@ -311,19 +348,21 @@
           <label class="field">취침 시간<input class="input" type="time" id="sleep" /></label>
           <label class="field">저녁 시작<input class="input" type="time" id="dinnerStart" /></label>
           <label class="field">저녁 끝<input class="input" type="time" id="dinnerEnd" /></label>
-          <label class="field">점심 시작 (학교 없는 날)<input class="input" type="time" id="lunchStart" /></label>
+          <label class="field"><span id="lunchLabel">점심 시작 (학교 없는 날)</span><input class="input" type="time" id="lunchStart" /></label>
           <label class="field">점심 끝<input class="input" type="time" id="lunchEnd" /></label>
         </div>
         <div class="grid3">
           <label class="field">공부 블록 (분)<input class="input" type="number" min="20" max="120" step="5" id="blockMin" /></label>
           <label class="field">쉬는 시간 (분)<input class="input" type="number" min="0" max="60" step="5" id="breakMin" /></label>
-          <label class="field">학교·학원 전후 이동 (분)<input class="input" type="number" min="0" max="120" step="5" id="bufferMin" /></label>
-          <label class="field">학교 가는 날 최대 공부 (시간)<input class="input" type="number" min="0" max="15" step="0.5" id="maxWeekday" /></label>
+          <label class="field"><span id="bufferLabel">학교·학원 전후 이동 (분)</span><input class="input" type="number" min="0" max="120" step="5" id="bufferMin" /></label>
+          <label class="field"><span id="maxWeekdayLabel">학교 가는 날 최대 공부 (시간)</span><input class="input" type="number" min="0" max="15" step="0.5" id="maxWeekday" /></label>
           <label class="field">쉬는 날 최대 공부 (시간)<input class="input" type="number" min="0" max="15" step="0.5" id="maxWeekend" /></label>
           <label class="field" style="display:flex;align-items:center;gap:8px;padding-top:18px">
             <input type="checkbox" id="reviewSlot" /> 하루 마지막은 복습 시간으로
           </label>
+          <label class="field">장기 시험 최소 비중 (%) <span class="muted">— 60일 이상 남은 시험</span><input class="input" type="number" min="0" max="50" step="5" id="minLongShare" /></label>
         </div>
+        <p class="muted" style="font-size:12px;margin:0">장기 시험(예: 수능·자격증)이 가까운 시험에 밀려 0이 되지 않도록 하루 공부 블록의 이 비율만큼은 꼭 배정해요. 다른 시험이 3일 이내로 다가온 날은 가까운 시험에 집중해요.</p>
       </div>
 
       <div class="tab-pane" data-pane="look">

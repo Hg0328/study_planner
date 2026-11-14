@@ -78,6 +78,16 @@ CREATE TABLE IF NOT EXISTS presence (
 // 이미 만들어진 DB(예: 배포된 Turso)에 새 칸을 추가하는 변경 — 이미 있으면 오류가 나므로 무시
 const MIGRATIONS = [
   "ALTER TABLE exams ADD COLUMN pref_days TEXT DEFAULT ''",
+  "ALTER TABLE exams ADD COLUMN kind TEXT DEFAULT 'naesin'",      // 시험 종류 (public/presets.js)
+  "ALTER TABLE exams ADD COLUMN priority TEXT DEFAULT 'normal'",   // 우선순위 high/normal/low
+  "ALTER TABLE exams ADD COLUMN stages TEXT DEFAULT ''",           // 직접 설정 단계 JSON
+  "ALTER TABLE exams ADD COLUMN expected_min INTEGER DEFAULT 0",   // 생성 때 계산한 전체 예상 공부 시간(분)
+  "ALTER TABLE users ADD COLUMN plan_until TEXT DEFAULT ''",       // 어느 날짜까지 계획을 만들었는지
+  "ALTER TABLE users ADD COLUMN plan_from TEXT DEFAULT ''",        // 지금 계획을 처음 만든(재생성한) 시작일 — 이어 생성 진도 계산용
+  // 빈 선호 요일이 '0'(일요일)로 저장되던 버그 데이터 정리 — 한 번만 실행 (meta에 기록, 이후 고른 일요일 단독 선호는 유지)
+  //  ※ 진짜 일요일만 고른 시험과 구분할 수 없어 기존 일요일 단독 선호는 초기화됨
+  "UPDATE exams SET pref_days='' WHERE pref_days='0' AND NOT EXISTS (SELECT 1 FROM meta WHERE key='mig_pref_days_0')",
+  "INSERT OR IGNORE INTO meta(key,value) VALUES('mig_pref_days_0','done')",
 ];
 
 // undefined/boolean 값을 DB가 받을 수 있는 형태로

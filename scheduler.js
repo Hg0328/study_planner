@@ -3,12 +3,16 @@
 // ─────────────────────────────────────────────
 // 1) 하루마다 학교·학원·식사 시간을 빼고 "빈 시간"을 계산
 // 2) 빈 시간을 공부 블록(기본 50분 + 쉬는 10분)으로 쪼갬
-// 3) 과목별 가중치 = 난이도 ÷ √(시험까지 남은 일수)  (D-1, D-2는 추가 가중)
+// 3) 과목별 가중치 = 난이도 ÷ √(시험까지 남은 일수) × 우선순위  (D-1, D-2는 추가 가중)
 //    → 가까운 시험 + 어려운 과목일수록 많은 블록을 배정
+//    장기 시험(60일 이상 남음)은 하루 블록의 최소 비중(minLongShare%)을 보장 (D-3 이내 시험이 있는 날 제외)
 // 4) 같은 과목이 연달아 오지 않도록 번갈아 배치 (집중력 유지)
-// 5) 과목별 진행도에 따라 [개념] → [문제] → [총정리] 단계로 제목을 붙이고
-//    시험 범위(단원)를 개념/문제 단계에 고르게 나눠 배정
+// 5) 시험 종류별 단계([개념]→[문제]→[총정리], 수능 [개념]→[기출]→[실전모의] 등, public/presets.js)로 제목을 붙이고
+//    시험 범위 항목을 앞 단계들에 고르게 나눠 배정
 // 6) 하루 마지막 블록은 "오늘 복습 & 오답노트", 시험 당일은 "최종 점검"
+// 7) 계산은 항상 마지막 시험일까지 끝까지 해서(시뮬레이션) 단계 비율·예상 시간을 정하고,
+//    저장은 until(오늘부터 최대 28일)까지만 → 나눠서 생성해도 진도가 이어짐
+const P = require('./public/presets');
 
 const DAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -35,6 +39,9 @@ const DEFAULT_SETTINGS = {
   maxWeekdayMin: 240,
   maxWeekendMin: 480,
   reviewSlot: true,  // 하루 마지막 블록을 복습으로
+  lifeType: 'student',     // 생활 유형 (presets.LIFE_TYPES)
+  examKinds: ['naesin'],   // 준비하는 시험 종류 (시험 추가 칸 기본 선택지·추천 과목용)
+  minLongShare: 20,        // 장기 시험 최소 비중 (%)
   // 꾸미기 (화면 테마·글꼴)
   theme: 'cream',
   handFont: 'pen',
@@ -83,6 +90,12 @@ function sanitizeSettings(input = {}) {
     maxWeekdayMin: num(input.maxWeekdayMin, d.maxWeekdayMin, 0, 900),
     maxWeekendMin: num(input.maxWeekendMin, d.maxWeekendMin, 0, 900),
     reviewSlot: input.reviewSlot === undefined ? d.reviewSlot : !!input.reviewSlot,
+    lifeType: P.LIFE_IDS.includes(input.lifeType) ? input.lifeType : d.lifeType,
+    examKinds: (() => {
+      const k = [...new Set((Array.isArray(input.examKinds) ? input.examKinds : []).filter((x) => P.KIND_IDS.includes(x)))];
+      return k.length ? k : [...d.examKinds];
+    })(),
+    minLongShare: num(input.minLongShare, d.minLongShare, 0, 50),
     theme: THEME_IDS.includes(input.theme) ? input.theme : d.theme,
     handFont: FONT_IDS.includes(input.handFont) ? input.handFont : d.handFont,
     fontScale: [1, 1.1, 1.2].includes(Number(input.fontScale)) ? Number(input.fontScale) : d.fontScale,
@@ -98,7 +111,7 @@ function fixedBlocksFor(date, s, examsToday = []) {
     out.push({ start: toMin(s.examDay.start), end: toMin(s.examDay.end), label: `시험 · ${examsToday.map((e) => e.subject).join(', ')}`, kind: 'exam', buffer: true });
     out.push({ start: toMin(s.lunch.start), end: toMin(s.lunch.end), label: '점심', kind: 'meal' });
   } else if (sc.on) {
-    out.push({ start: toMin(sc.start), end: toMin(sc.end), label: '학교', kind: 'school', buffer: true });
+    out.push({ start: toMin(sc.start), end: toMin(sc.end), label: P.fixedLabel(s.lifeType), kind: 'school', buffer: true });
   } else {
     out.push({ start: toMin(s.lunch.start), end: toMin(s.lunch.end), label: '점심', kind: 'meal' });
   }
@@ -178,15 +191,55 @@ function interleave(counts) {
 const splitUnits = (scope) => String(scope || '').split(/;/.test(scope || '') ? /[;\n]+/ : /[,\n/·]+/).map((x) => x.trim()).filter(Boolean)
   .reduce((acc, u) => { if (acc.length && u.length < 5) acc[acc.length - 1] += `, ${u}`; else acc.push(u); return acc; }, []);
 
+// 단계 경계: 단계마다 최소 1블록. 전체 블록이 단계 수보다 적으면 마지막 단계(총정리·모의고사 등)부터 배정
+function stageCounts(N, stages) {
+  const S = stages.length;
+  if (N <= 0) return stages.map(() => 0);
+  if (N < S) return stages.map((_, i) => (i >= S - N ? 1 : 0));
+  const counts = [];
+  let prev = 0, cum = 0;
+  for (let i = 0; i < S - 1; i++) {
+    cum += stages[i].ratio;
+    const b = Math.min(N - (S - 1 - i), Math.max(prev + 1, Math.ceil((N * cum) / 100)));
+    counts.push(b - prev);
+    prev = b;
+  }
+  counts.push(N - prev);
+  return counts;
+}
+
+// 진도 번호(idx, 0부터)에 맞는 할 일 제목
+function stageTitle(exam, idx, N) {
+  const stages = P.stagesFor(exam);
+  const counts = stageCounts(N, stages);
+  const units = splitUnits(exam.scope);
+  let base = 0;
+  for (let i = 0; i < stages.length; i++) {
+    const st = stages[i], c = counts[i];
+    if (idx < base + c || i === stages.length - 1) {
+      const p = Math.min(idx - base, Math.max(0, c - 1));
+      if (!st.units) return `[${st.name}] ${st.detail}`;
+      const firstUnitStage = stages.findIndex((x) => x.units) === i;
+      const u = units.length ? units[Math.floor((p * units.length) / c)]
+        : firstUnitStage ? `범위 전체 ${p + 1}/${c}` : `${st.name === '문제' ? '문제 세트' : '세트'} ${p + 1}`;
+      return st.detail ? `[${st.name}] ${u} — ${st.detail}` : `[${st.name}] ${u}`;
+    }
+    base += c;
+  }
+  return '';
+}
+
 /**
  * @param settings  정리된 설정
- * @param exams     [{id, subject, date, difficulty, scope}]
+ * @param exams     [{id, subject, date, difficulty, scope, kind, priority, stages, pref_days}]
  * @param keepTasks 이미 존재해서 유지되는 일정 (완료/직접 추가) — 시간이 겹치지 않게 피함
  * @param startDate 계획 시작일
- * @param doneCount { examId: 이미 완료한 공부 블록 수 } — 진도 이어가기용
+ * @param until     이 날짜까지만 결과에 담음 (없으면 끝까지). 계산은 항상 마지막 시험일까지
+ * @param doneCount { examId: 시작일 전까지 진행한 공부 블록 수 } — 진도 이어가기용
+ * @returns { tasks: until까지의 할 일, all: 끝까지 계산한 할 일, simMin: {examId: 시작일 이후 예상 공부 분} }
  */
-function generatePlan({ settings: s, exams, keepTasks = [], startDate, doneCount = {} }) {
-  if (!exams.length) return [];
+function buildPlan({ settings: s, exams, keepTasks = [], startDate, until = null, doneCount = {} }) {
+  if (!exams.length) return { tasks: [], all: [], simMin: {} };
   const sorted = [...exams].sort((a, b) => a.date.localeCompare(b.date));
   const lastDate = sorted[sorted.length - 1].date;
   const out = [];
@@ -216,17 +269,20 @@ function generatePlan({ settings: s, exams, keepTasks = [], startDate, doneCount
       slots = slots.slice(0, -1);
     }
 
-    const weights = upcoming.map((e) => {
-      const dl = diffDays(date, e.date);
+    const dls = upcoming.map((e) => diffDays(date, e.date));
+    const weights = upcoming.map((e, i) => {
+      const dl = dls[i];
       let w = (e.difficulty || 3) / Math.sqrt(dl);
       if (dl === 1) w *= 4;
       else if (dl === 2) w *= 1.6;
       // 선호 요일: 그 요일엔 이 과목 비중 ×3, 다른 요일엔 ×0.5 (시험 2일 전부터는 무시하고 시험 대비 우선)
       const pref = String(e.pref_days || '').split(',').filter(Boolean).map(Number);
       if (pref.length && dl > 2) w *= pref.includes(dow(date)) ? 3 : 0.5;
+      w *= (P.PRIORITY[e.priority] || P.PRIORITY.normal).weight;
       return w;
     });
-    const order = interleave(allocate(slots.length, weights));
+    const counts = allocateWithLongShare(slots.length, weights, dls, todays.length > 0, s.minLongShare ?? 0);
+    const order = interleave(counts);
     slots.forEach((sl, i) => {
       const e = upcoming[order[i]];
       out.push({ date, start: sl.start, end: sl.end, exam_id: e.id, subject: e.subject, kind: 'study', title: '' });
@@ -236,39 +292,51 @@ function generatePlan({ settings: s, exams, keepTasks = [], startDate, doneCount
     }
   }
 
-  // ── 과목별 단계/단원 제목 붙이기 ──
+  // ── 과목별 단계/단원 제목 붙이기 (끝까지 계산한 전체 블록 수 기준) ──
+  const simMin = {};
   for (const e of sorted) {
     const list = out.filter((t) => t.kind === 'study' && t.exam_id === e.id);
+    simMin[e.id] = list.reduce((a, t) => a + (t.end - t.start), 0);
     const done = doneCount[e.id] || 0;
     const N = done + list.length;
-    const conceptN = Math.max(1, Math.ceil(N * 0.45));
-    const practiceN = Math.max(1, Math.ceil(N * 0.8) - conceptN);
-    const units = splitUnits(e.scope);
     const d1Count = {};
     list.forEach((t, k) => {
-      const idx = done + k;
       if (diffDays(t.date, e.date) === 1) {
         const c = (d1Count[t.date] = (d1Count[t.date] || 0) + 1);
         t.title = ['D-1 실전 모의 풀이 — 시간 재고 풀어보기', 'D-1 취약 단원 & 오답노트 최종 점검', 'D-1 핵심 암기 백지 테스트'][(c - 1) % 3];
         return;
       }
-      if (idx < conceptN) {
-        const u = units.length ? units[Math.floor((idx * units.length) / conceptN)] : `범위 전체 ${idx + 1}/${conceptN}`;
-        t.title = `[개념] ${u} — 교과서·필기 정리`;
-      } else if (idx < conceptN + practiceN) {
-        const p = idx - conceptN;
-        const u = units.length ? units[Math.floor((p * units.length) / practiceN)] : `문제 세트 ${p + 1}`;
-        t.title = `[문제] ${u} — 학습지·기출 풀이`;
-      } else {
-        t.title = '[총정리] 오답노트 & 핵심 암기 정리';
-      }
+      t.title = stageTitle(e, done + k, N);
     });
   }
-  return out;
+  return { tasks: until ? out.filter((t) => t.date <= until) : out, all: out, simMin };
 }
+
+// 장기 시험 최소 비중: 60일 이상 남은 시험 묶음에 하루 블록의 minShare%를 보장
+//  - 장기·단기 시험이 둘 다 있을 때만, D-3 ~ 당일 시험이 있는 날은 적용 안 함
+//  - 단기 시험 몫은 최소 1블록 남김
+function allocateWithLongShare(n, weights, dls, examToday, minShare) {
+  const base = allocate(n, weights);
+  const isLong = dls.map((dl) => dl >= P.LONG_TERM_DAYS);
+  const longIdx = [], shortIdx = [];
+  isLong.forEach((l, i) => (l ? longIdx : shortIdx).push(i));
+  if (!minShare || !longIdx.length || !shortIdx.length) return base;
+  if (examToday || dls.some((dl) => dl <= P.LONG_TERM_OFF_DAYS)) return base;
+  const need = Math.min(n - 1, Math.ceil((n * minShare) / 100));
+  const have = longIdx.reduce((a, i) => a + base[i], 0);
+  if (have >= need) return base;
+  const res = new Array(weights.length).fill(0);
+  const longC = allocate(need, longIdx.map((i) => weights[i]));
+  const shortC = allocate(n - need, shortIdx.map((i) => weights[i]));
+  longIdx.forEach((i, k) => (res[i] = longC[k]));
+  shortIdx.forEach((i, k) => (res[i] = shortC[k]));
+  return res;
+}
+
+const generatePlan = (args) => buildPlan(args).tasks;
 
 module.exports = {
   DEFAULT_SETTINGS, PALETTE, DAY_KO,
-  sanitizeSettings, fixedBlocksFor, generatePlan,
+  sanitizeSettings, fixedBlocksFor, generatePlan, buildPlan, stageCounts, stageTitle, allocateWithLongShare, splitUnits,
   toMin, toHM, addDays, diffDays, dow,
 };

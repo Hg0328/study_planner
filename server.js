@@ -8,6 +8,7 @@ const path = require('path');
 const crypto = require('crypto');
 const db = require('./db');
 const S = require('./scheduler');
+const P = require('./public/presets');
 const { parseScopeText, normSubject } = require('./scopeParser');
 
 const app = express();
@@ -128,17 +129,27 @@ function cleanExam(b, fallbackColor) {
   const color = /^#[0-9a-f]{6}$/i.test(b.color || '') ? b.color : fallbackColor;
   // 선호 요일 (0=일 ~ 6=토) → "1,3" 형태로 저장
   const rawDays = Array.isArray(b.pref_days) ? b.pref_days : String(b.pref_days || '').split(',');
-  const pref_days = [...new Set(rawDays.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6) )].sort().join(',');
-  return { subject, date: b.date, difficulty, scope: String(b.scope || '').slice(0, 500), color, pref_days };
+  // 빈 문자열은 숫자로 바꾸기 전에 거름 (Number('') === 0 → 일요일로 저장되던 버그)
+  const pref_days = [...new Set(rawDays.filter((d) => String(d ?? '').trim() !== '').map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6) )].sort().join(',');
+  const kind = P.KIND_IDS.includes(b.kind) ? b.kind : 'naesin';
+  const priority = P.PRIORITY_IDS.includes(b.priority) ? b.priority : 'normal';
+  let stages = '';
+  if (kind === 'custom') {
+    const st = P.cleanStages(b.stages);
+    if (!st) return { error: '직접 설정 단계는 이름과 비율을 2개 이상 입력해 주세요' };
+    stages = JSON.stringify(st);
+  }
+  return { subject, date: b.date, difficulty, scope: String(b.scope || '').slice(0, 500), color, pref_days, kind, priority, stages };
 }
+const EXAM_COLS = 'subject,date,difficulty,scope,color,pref_days,kind,priority,stages';
+const examArgs = (e) => [e.subject, e.date, e.difficulty, e.scope, e.color, e.pref_days, e.kind, e.priority, e.stages];
 app.get('/api/exams', auth, h(async (req, res) => res.json(await getExams(req.uid))));
 app.post('/api/exams', auth, h(async (req, res) => {
   const n = (await db.get('SELECT COUNT(*) c FROM exams WHERE user_id=?', [req.uid])).c;
   if (n >= 30) return bad(res, '시험 과목은 최대 30개까지 등록할 수 있어요');
   const e = cleanExam(req.body || {}, S.PALETTE[n % S.PALETTE.length]);
   if (e.error) return bad(res, e.error);
-  const r = await db.run('INSERT INTO exams(user_id,subject,date,difficulty,scope,color,pref_days) VALUES(?,?,?,?,?,?,?)',
-    [req.uid, e.subject, e.date, e.difficulty, e.scope, e.color, e.pref_days]);
+  const r = await db.run(`INSERT INTO exams(user_id,${EXAM_COLS}) VALUES(?,?,?,?,?,?,?,?,?,?)`, [req.uid, ...examArgs(e)]);
   res.json({ id: r.lastInsertRowid, ...e });
 }));
 app.put('/api/exams/:id', auth, h(async (req, res) => {
@@ -147,7 +158,7 @@ app.put('/api/exams/:id', auth, h(async (req, res) => {
   const e = cleanExam({ ...cur, ...req.body }, cur.color);
   if (e.error) return bad(res, e.error);
   await db.batch([
-    { sql: 'UPDATE exams SET subject=?,date=?,difficulty=?,scope=?,color=?,pref_days=? WHERE id=?', args: [e.subject, e.date, e.difficulty, e.scope, e.color, e.pref_days, cur.id] },
+    { sql: 'UPDATE exams SET subject=?,date=?,difficulty=?,scope=?,color=?,pref_days=?,kind=?,priority=?,stages=? WHERE id=?', args: [...examArgs(e), cur.id] },
     { sql: 'UPDATE tasks SET subject=? WHERE exam_id=? AND user_id=?', args: [e.subject, cur.id, req.uid] },
   ]);
   res.json({ id: cur.id, ...e });
@@ -244,14 +255,16 @@ app.post('/api/exams/extract', auth, h(async (req, res) => {
 app.post('/api/exams/bulk', auth, h(async (req, res) => {
   const list = Array.isArray(req.body.exams) ? req.body.exams.slice(0, 30) : [];
   if (!list.length) return bad(res, '추가할 과목이 없어요');
+  // 같은 과목명이라도 시험 종류가 다르면 다른 시험 (예: 수학·내신 ≠ 수학·수능)
   const key = (s) => String(s || '').replace(/\s/g, '').toLowerCase();
+  const kindOf = (k) => (P.KIND_IDS.includes(k) ? k : 'naesin');
   const existing = await getExams(req.uid);
   const stmts = [], errors = [];
   let added = 0, updated = 0;
   for (const b of list) {
-    const cur = existing.find((e) => key(e.subject) === key(b.subject));
+    const cur = existing.find((e) => key(e.subject) === key(b.subject) && kindOf(e.kind) === kindOf(b.kind));
     if (cur) {
-      const e = cleanExam({ ...cur, ...b, subject: cur.subject, scope: b.scope || cur.scope }, cur.color);
+      const e = cleanExam({ ...cur, ...b, subject: cur.subject, kind: cur.kind, scope: b.scope || cur.scope }, cur.color);
       if (e.error) { errors.push(`${b.subject}: ${e.error}`); continue; }
       stmts.push({ sql: 'UPDATE exams SET date=?,difficulty=?,scope=? WHERE id=?', args: [e.date, e.difficulty, e.scope, cur.id] });
       updated++;
@@ -259,8 +272,8 @@ app.post('/api/exams/bulk', auth, h(async (req, res) => {
       if (existing.length + added >= 30) { errors.push(`${b.subject}: 과목은 최대 30개까지`); continue; }
       const e = cleanExam(b, S.PALETTE[(existing.length + added) % S.PALETTE.length]);
       if (e.error) { errors.push(`${b.subject || '(이름 없음)'}: ${e.error}`); continue; }
-      stmts.push({ sql: 'INSERT INTO exams(user_id,subject,date,difficulty,scope,color) VALUES(?,?,?,?,?,?)', args: [req.uid, e.subject, e.date, e.difficulty, e.scope, e.color] });
-      existing.push({ subject: e.subject }); // 같은 요청 안의 중복 방지
+      stmts.push({ sql: `INSERT INTO exams(user_id,${EXAM_COLS}) VALUES(?,?,?,?,?,?,?,?,?,?)`, args: [req.uid, ...examArgs(e)] });
+      existing.push({ subject: e.subject, kind: e.kind }); // 같은 요청 안의 중복 방지
       added++;
     }
   }
@@ -269,29 +282,73 @@ app.post('/api/exams/bulk', auth, h(async (req, res) => {
 }));
 
 // ── 계획 자동 생성 ──
+// 오늘부터 최대 PLAN_DAYS일까지만 저장하고, 남은 기간이 EXTEND_BELOW일 미만이면 화면이 mode:'extend'로 이어서 생성
+//  - regen(기본): 시작일 이후 "자동 생성 & 미완료" 일정을 지우고 다시 만듦 (완료/직접 추가는 유지)
+//  - extend: plan_until 다음 날부터 이어서 만듦. 진도 = 완료 수 + (plan_from ~ 시작 전날) 미완료 자동 공부 수
+//    → 이미 만들어 둔 블록 바로 다음 번호부터 이어짐 (재생성 때는 지금처럼 완료 수만 진도로 셈)
+//  계산은 항상 마지막 시험일까지 끝까지 해서 단계 비율과 시험별 예상 전체 시간(expected_min)을 정함
+const PLAN_DAYS = 28;
+const EXTEND_BELOW = 14;
 app.post('/api/generate', auth, h(async (req, res) => {
-  const startDate = req.body.startDate;
-  if (!isDate(startDate)) return bad(res, '시작 날짜가 올바르지 않아요');
+  const b = req.body || {};
+  const today = isDate(b.today) ? b.today : b.startDate;
+  if (!isDate(today)) return bad(res, '날짜가 올바르지 않아요');
+  const extend = b.mode === 'extend';
+  const until = S.addDays(today, PLAN_DAYS - 1);
+  const user = await db.get('SELECT plan_until, plan_from FROM users WHERE id=?', [req.uid]);
+  let startDate = isDate(b.startDate) ? b.startDate : today;
+  if (extend) {
+    const pu = user?.plan_until || '';
+    startDate = pu && S.addDays(pu, 1) > today ? S.addDays(pu, 1) : today;
+    if (startDate > until) return res.json({ created: 0, studyMin: 0, from: startDate, to: pu, planUntil: pu });
+  }
   const settings = await getSettings(req.uid);
   const exams = (await getExams(req.uid)).filter((e) => e.date >= startDate);
-  if (!exams.length) return bad(res, '앞으로 남은 시험이 없어요. 시험 과목을 먼저 등록해 주세요');
-
-  // 시작일 이후의 "자동 생성 & 미완료" 일정만 새로 만들고, 완료/직접 추가한 일정은 유지
-  const keepTasks = await db.all('SELECT * FROM tasks WHERE user_id=? AND date>=? AND NOT (auto=1 AND done=0)', [req.uid, startDate]);
-  const doneCount = {};
-  for (const r of await db.all("SELECT exam_id, COUNT(*) c FROM tasks WHERE user_id=? AND done=1 AND kind='study' GROUP BY exam_id", [req.uid])) {
-    doneCount[r.exam_id] = r.c;
+  if (!exams.length) {
+    if (extend) return res.json({ created: 0, studyMin: 0, from: startDate, to: user?.plan_until || '', planUntil: user?.plan_until || '' });
+    return bad(res, '앞으로 남은 시험이 없어요. 시험 과목을 먼저 등록해 주세요');
   }
-  const plan = S.generatePlan({ settings, exams, keepTasks, startDate, doneCount });
+
+  const keepTasks = await db.all('SELECT * FROM tasks WHERE user_id=? AND date>=? AND NOT (auto=1 AND done=0)', [req.uid, startDate]);
+  // 진도 = 완료한 공부 블록 + (이어 생성일 때) 지금 계획 시작일~이어 생성 시작 전날의 미완료 자동 공부 블록
+  const doneCount = {}, doneMin = {};
+  for (const r of await db.all(`SELECT exam_id, COUNT(*) c, COALESCE(SUM(CASE WHEN start IS NOT NULL THEN end-start END),0) m
+      FROM tasks WHERE user_id=? AND done=1 AND kind='study' GROUP BY exam_id`, [req.uid])) {
+    doneCount[r.exam_id] = r.c; doneMin[r.exam_id] = r.m;
+  }
+  const planFrom = extend && user?.plan_from && startDate > today ? user.plan_from : startDate;
+  if (planFrom < startDate) {
+    for (const r of await db.all(`SELECT exam_id, COUNT(*) c, COALESCE(SUM(end-start),0) m FROM tasks
+        WHERE user_id=? AND auto=1 AND done=0 AND kind='study' AND date>=? AND date<? GROUP BY exam_id`, [req.uid, planFrom, startDate])) {
+      doneCount[r.exam_id] = (doneCount[r.exam_id] || 0) + r.c; doneMin[r.exam_id] = (doneMin[r.exam_id] || 0) + r.m;
+    }
+  }
+  const { tasks: plan, simMin } = S.buildPlan({ settings, exams, keepTasks, startDate, until, doneCount });
+  const lastExam = exams[exams.length - 1].date;
+  const planUntil = until < lastExam ? until : lastExam;
   await db.batch([
     { sql: 'DELETE FROM tasks WHERE user_id=? AND auto=1 AND done=0 AND date>=?', args: [req.uid, startDate] },
     ...plan.map((t) => ({
       sql: 'INSERT INTO tasks(user_id,date,start,end,exam_id,subject,title,kind,auto) VALUES(?,?,?,?,?,?,?,?,1)',
       args: [req.uid, t.date, t.start, t.end, t.exam_id, t.subject, t.title, t.kind],
     })),
+    ...exams.map((e) => ({ sql: 'UPDATE exams SET expected_min=? WHERE id=? AND user_id=?', args: [(doneMin[e.id] || 0) + (simMin[e.id] || 0), e.id, req.uid] })),
+    { sql: 'UPDATE users SET plan_until=?, plan_from=? WHERE id=?', args: [planUntil, planFrom, req.uid] },
   ]);
   const studyMin = plan.reduce((a, t) => a + (t.start != null ? t.end - t.start : 0), 0);
-  res.json({ created: plan.length, studyMin, from: startDate, to: exams[exams.length - 1].date });
+  res.json({ created: plan.length, studyMin, from: startDate, to: planUntil, planUntil, lastExam });
+}));
+
+// 이어 생성이 필요한지 (달력·플래너를 열 때 확인)
+app.get('/api/plan', auth, h(async (req, res) => {
+  const today = req.query.today;
+  if (!isDate(today)) return bad(res, '날짜가 올바르지 않아요');
+  const pu = (await db.get('SELECT plan_until FROM users WHERE id=?', [req.uid]))?.plan_until || '';
+  const last = (await db.get('SELECT MAX(date) d FROM exams WHERE user_id=?', [req.uid]))?.d || '';
+  const needsExtend = !!pu && last > pu && S.diffDays(today, pu) < EXTEND_BELOW;
+  // plan_until이 비어 있음 = 28일 생성 기능 전의 계정 → 남은 시험이 있으면 오늘부터 28일치로 다시 생성
+  const needsRegen = !pu && last >= today;
+  res.json({ planUntil: pu, lastExam: last, needsExtend, needsRegen, planDays: PLAN_DAYS, extendBelow: EXTEND_BELOW });
 }));
 
 // ── 캘린더 요약 ──
@@ -322,7 +379,8 @@ app.get('/api/day/:date', auth, h(async (req, res) => {
     WHERE t.user_id=? AND t.date=? ORDER BY t.start IS NULL, t.start, t.id`, [req.uid, date]);
   const fixed = S.fixedBlocksFor(date, settings, exams.filter((e) => e.date === date));
   const memo = (await db.get('SELECT text, mood, focus_min FROM memos WHERE user_id=? AND date=?', [req.uid, date])) || { text: '', mood: '', focus_min: 0 };
-  res.json({ date, settings: { wake: settings.wake, sleep: settings.sleep, blockMin: settings.blockMin }, fixed, tasks, exams, memo });
+  const planUntil = (await db.get('SELECT plan_until FROM users WHERE id=?', [req.uid]))?.plan_until || '';
+  res.json({ date, settings: { wake: settings.wake, sleep: settings.sleep, blockMin: settings.blockMin }, fixed, tasks, exams, memo, planUntil });
 }));
 
 // ── 할 일 ──
@@ -378,7 +436,7 @@ app.post('/api/focus/:date', auth, h(async (req, res) => {
 app.get('/api/stats', auth, h(async (req, res) => {
   const today = isDate(req.query.today) ? req.query.today : new Date().toISOString().slice(0, 10);
   const subjects = await db.all(`
-    SELECT e.id, e.subject, e.color, e.date, e.difficulty,
+    SELECT e.id, e.subject, e.color, e.date, e.difficulty, e.kind, e.expected_min,
       COUNT(t.id) total, COALESCE(SUM(t.done),0) done,
       COALESCE(SUM(CASE WHEN t.done=1 AND t.start IS NOT NULL THEN t.end-t.start END),0) doneMin,
       COALESCE(SUM(CASE WHEN t.start IS NOT NULL THEN t.end-t.start END),0) planMin
