@@ -52,6 +52,14 @@ test('연도가 없는 날짜는 오늘 기준으로 연도를 추정한다', ()
   assert.equal(date('2027.03.05'), '2027-03-05');      // 연도가 적혀 있으면 그대로
 });
 
+test('해가 바뀌는 경우: 60일 전 ~ 305일 후 범위의 연도를 고른다', () => {
+  const date = (line, today) => parseScopeText(`${line} 수학 1단원`, today)[0].date;
+  assert.equal(date('12월 30일', '2027-01-03'), '2026-12-30'); // 새해 직후 → 작년 12월
+  assert.equal(date('1월 5일', '2026-12-20'), '2027-01-05');   // 연말 → 내년 1월
+  assert.equal(date('3/15', '2026-11-14'), '2027-03-15');      // 올해 3월은 60일보다 더 지남 → 내년
+  assert.equal(date('11월 24일', '2026-11-14'), '2026-11-24'); // 올해
+});
+
 test('"국 어"처럼 글자 사이가 띄어진 과목명도 인식한다', () => {
   const r = parseScopeText('국 어 : 11/25(수) 교과서 1~3단원\n한 국 사 : 11/26(목) 프린트 전체', TODAY);
   assert.deepEqual(r.map((x) => [x.subject, x.date, x.scope]), [
