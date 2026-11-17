@@ -223,3 +223,24 @@ table.week th { color: var(--muted); font-size: 13px; }
 .suggest { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; min-height: 30px; align-items: center; }
 .suggest button { border: 1.5px dashed var(--line); background: none; border-radius: 999px; padding: 2px 10px; font: inherit; font-size: 12px; color: var(--ink); cursor: pointer; }
 .suggest button:hover { border-color: var(--accent); }
+
+/* ── 화면 모드 (common.js Mode): 기본 모드에서 숨길 것 = data-expert, 기본 모드에만 보일 것 = data-basic ── */
+.mode-basic [data-expert], .mode-expert [data-basic] { display: none !important; }
+/* 기본 모드 설정: 단계 표시 */
+.steps { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1.5px solid var(--line); }
+.steps button { border: 1.5px solid var(--line); background: none; border-radius: 999px; padding: 4px 12px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.steps button.done { color: var(--ink); }
+.steps button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.step-desc { font-size: 13px; margin: 0 0 14px; }
+.mode-basic #suggestField { grid-column: 1 / -1; }
+.mode-basic .cand .c-diff { display: none; }
+.mode-basic .cand { grid-template-columns: 26px 1.1fr 1.2fr 2.6fr 28px; }
+@media (max-width: 640px) { .mode-basic .cand { grid-template-columns: 26px 1fr 1fr 28px; } }
+.mode-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; font-size: 12px; color: var(--muted); }
+.mode-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 520px) { .mode-cards { grid-template-columns: 1fr; } }
+.mode-cards button { text-align: left; padding: 18px 16px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--paper); cursor: pointer; font: inherit; color: inherit; transition: border-color .15s, box-shadow .15s; }
+.mode-cards button:hover, .mode-cards button:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; outline: none; }
+.mode-cards b { display: block; font-size: 17px; margin: 6px 0 6px; }
+.mode-cards small { color: var(--muted); font-size: 13px; line-height: 1.5; display: block; }
+.mode-cards .ic { font-size: 26px; }

@@ -149,6 +149,7 @@
         <button class="btn small ghost" id="lookBtn" aria-expanded="false">🎨 테마</button>
         <div class="look-pop" id="lookPop" hidden></div>
       </div>
+      <a class="btn small ghost" id="weekLink" data-basic>🗓 주간 플래너로</a>
       <a class="btn small ghost" href="index.html" id="calLink">📅 달력으로</a>
       <button class="btn small ghost" onclick="window.print()" title="할 일 목록만 한 장으로 인쇄">🖨 인쇄</button>
       <button class="btn small ghost" id="plHelp" title="사용법">❓</button>
@@ -180,7 +181,7 @@
           </div>
           <ul class="todos" id="todos"></ul>
 
-          <form class="add-form no-print" id="addForm">
+          <form class="add-form no-print" id="addForm" data-expert>
             <label class="field" style="margin:0">시작<input class="input" type="time" name="start" /></label>
             <label class="field" style="margin:0">끝<input class="input" type="time" name="end" /></label>
             <label class="field" style="margin:0">과목<select class="input" name="exam_id"></select></label>
@@ -188,7 +189,7 @@
             <button class="btn small primary full">+ 추가</button>
           </form>
 
-          <div class="card no-print" style="margin-top:22px;background:var(--soft)">
+          <div class="card no-print" style="margin-top:22px;background:var(--soft)" data-expert>
             <b>계획이 밀렸나요?</b>
             <p class="muted" style="font-size:13px;margin:6px 0 10px">완료하지 못한 진도는 그대로 이어서, 내일부터 남은 시험까지 계획을 다시 짜 드려요. (완료한 일정·직접 추가한 일정은 그대로 유지)</p>
             <button class="btn small sage" id="replan">🔄 내일부터 계획 다시 짜기</button>
@@ -197,7 +198,7 @@
 
         <!-- 사이드: 달성률, 타이머, 회고 -->
         <aside class="side">
-          <div class="card">
+          <div class="card" data-expert>
             <h3 class="section-title"><span class="hl">달성률</span></h3>
             <div class="donut" id="donut" style="--p:0"><div><span><b id="pct">0%</b><small id="pctSub"></small></span></div></div>
             <div class="kv"><span>계획한 공부</span><b id="planMin">-</b></div>
@@ -234,7 +235,7 @@
             </div>
           </div>
 
-          <div class="card">
+          <div class="card" data-expert>
             <h3 class="section-title"><span class="hl">오늘의 회고</span></h3>
             <div class="moods" id="moods">
               <button data-v="😆" title="최고">😆</button><button data-v="🙂" title="좋음">🙂</button>
