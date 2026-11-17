@@ -160,9 +160,9 @@
       <h3 class="section-title"><span class="hl">D-Day</span></h3>
       <ul class="dlist" id="dlist"></ul>
 
-      <h3 class="section-title"><span class="hl">시험별 진행률</span></h3>
-      <div id="progList"></div>
-      <div class="stat-row">
+      <h3 class="section-title" data-expert><span class="hl">시험별 진행률</span></h3>
+      <div id="progList" data-expert></div>
+      <div class="stat-row" data-expert>
         <div class="stat"><b id="stPct">0%</b><span>전체 달성률</span></div>
         <div class="stat"><b id="stStreak">0일</b><span>연속 공부</span></div>
         <div class="stat"><b id="stFocus">0분</b><span>타이머 집중</span></div>
@@ -187,7 +187,8 @@
         <button class="btn small ghost" id="thisM">이번 달</button>
         <button class="btn small ghost" onclick="window.print()" title="이번 달 달력 인쇄">🖨 인쇄</button>
         <span class="sp"></span>
-        <span class="muted" style="font-size:13px">날짜를 누르면 그날의 플래너가 새 창으로 열려요</span>
+        <span class="muted" style="font-size:13px" data-expert>날짜를 누르면 그날의 플래너가 새 창으로 열려요</span>
+        <span class="muted" style="font-size:13px" data-basic>날짜를 누르면 그 주의 주간 플래너가 새 창으로 열려요</span>
       </div>
       <div id="emptyBox"></div>
       <div class="legend">
@@ -217,6 +218,21 @@
     </form>
   </div>
 
+  <!-- 가입 직후: 화면 모드 선택 -->
+  <div class="overlay" id="modeOv">
+    <div class="paper modal onb">
+      <div class="tape"></div>
+      <h2 class="section-title" style="margin:0 0 6px"><span class="hl">어떻게 시작할까요?</span></h2>
+      <p class="muted" style="font-size:13px;margin:0 0 16px">나중에 설정 창에서 언제든 바꿀 수 있어요. 바꿔도 입력한 내용은 그대로 남아요.</p>
+      <div class="mode-cards">
+        <button type="button" data-mode="basic"><span class="ic">🌱</span><b>간단하게 설정할래요</b>
+          <small>시험·학교·학원·식사 시간만 차례대로 넣으면 끝. 한 주 할 일을 한 화면에서 체크해요.</small></button>
+        <button type="button" data-mode="expert"><span class="ic">🛠️</span><b>다 설정할래요</b>
+          <small>난이도·우선순위·선호 요일·공부 블록까지 직접 정하고, 진행률·회고·꾸미기도 써요.</small></button>
+      </div>
+    </div>
+  </div>
+
   <!-- 가입 직후: 생활 유형 · 시험 종류 선택 -->
   <div class="overlay" id="onbOv">
     <div class="paper modal onb">
@@ -242,7 +258,9 @@
         <h2 class="section-title" style="margin:0"><span class="hl">시험 · 시간표 설정</span></h2>
         <button class="x" id="setClose" aria-label="닫기">✕</button>
       </div>
-      <div class="tabs" id="tabs">
+      <div class="steps" id="steps" data-basic></div>
+      <p class="muted step-desc" id="stepDesc" data-basic></p>
+      <div class="tabs" id="tabs" data-expert>
         <button data-tab="exam" class="on">📝 시험 과목</button>
         <button data-tab="school" id="tabSchool">🏫 학교 시간</button>
         <button data-tab="academy">🎒 학원</button>
@@ -280,21 +298,21 @@
         <form id="examForm">
           <input type="hidden" name="id" />
           <div class="grid3">
-            <label class="field">시험 종류<select class="input" name="kind" id="examKind"></select></label>
-            <label class="field">우선순위 (난이도와 별개)
+            <label class="field" data-expert>시험 종류<select class="input" name="kind" id="examKind"></select></label>
+            <label class="field" data-expert>우선순위 (난이도와 별개)
               <select class="input" name="priority">
                 <option value="high">높음 — 더 많이</option><option value="normal" selected>보통</option><option value="low">낮음 — 덜</option>
               </select>
             </label>
-            <div class="field">추천 과목 <span class="muted">(누르면 입력)</span><div class="suggest" id="suggest"></div></div>
+            <div class="field" id="suggestField">추천 과목 <span class="muted">(누르면 입력)</span><div class="suggest" id="suggest"></div></div>
           </div>
-          <label class="field" id="stagesRow" hidden>공부 단계 — "이름:비율"을 쉼표로 2~4개 (예: 이론:40, 문제풀이:40, 정리:20)
+          <label class="field" id="stagesRow" hidden data-expert>공부 단계 — "이름:비율"을 쉼표로 2~4개 (예: 이론:40, 문제풀이:40, 정리:20)
             <input class="input" name="stages" placeholder="이론:40, 문제풀이:40, 정리:20" maxlength="120" />
           </label>
           <div class="grid3">
             <label class="field">과목<input class="input" name="subject" placeholder="예) 수학" required maxlength="30" /></label>
             <label class="field">시험 날짜<input class="input" name="date" type="date" required /></label>
-            <label class="field">난이도 (어려울수록 시간 ↑)
+            <label class="field" data-expert>난이도 (어려울수록 시간 ↑)
               <select class="input" name="difficulty">
                 <option value="1">★ 쉬움</option><option value="2">★★</option><option value="3" selected>★★★ 보통</option>
                 <option value="4">★★★★</option><option value="5">★★★★★ 어려움</option>
@@ -304,7 +322,7 @@
           <label class="field"><span id="scopeLabel">시험 범위 — 단원을 쉼표(,)로 구분하면 단원별로 나눠서 계획해요</span>
             <input class="input" name="scope" placeholder="예) 1단원 다항식, 2단원 방정식, 3단원 부등식" maxlength="500" />
           </label>
-          <div class="field" style="margin-bottom:14px">선호 요일 (선택) — 고른 요일에 이 과목을 더 많이 배치해요 <span class="muted">(시험 2일 전부터는 시험 대비가 우선)</span>
+          <div class="field" style="margin-bottom:14px" data-expert>선호 요일 (선택) — 고른 요일에 이 과목을 더 많이 배치해요 <span class="muted">(시험 2일 전부터는 시험 대비가 우선)</span>
             <div class="daypick" id="prefDays" style="margin-top:6px">
               <label><input type="checkbox" value="1"><span>월</span></label><label><input type="checkbox" value="2"><span>화</span></label>
               <label><input type="checkbox" value="3"><span>수</span></label><label><input type="checkbox" value="4"><span>목</span></label>
@@ -313,7 +331,7 @@
             </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:18px">
-            <label class="muted" style="font-size:13px">색상 <input type="color" name="color" value="#e07a5f" style="vertical-align:middle;border:none;background:none;width:34px;height:26px" /></label>
+            <label class="muted" style="font-size:13px" data-expert>색상 <input type="color" name="color" value="#e07a5f" style="vertical-align:middle;border:none;background:none;width:34px;height:26px" /></label>
             <span style="flex:1"></span>
             <button type="button" class="btn small ghost" id="examCancel" hidden>취소</button>
             <button class="btn small primary" id="examSubmit">+ 과목 추가</button>
@@ -323,19 +341,19 @@
       </div>
 
       <div class="tab-pane" data-pane="school">
-        <div class="field" style="margin-bottom:12px">생활 유형 <span class="muted">— 바꾸면 기본 시간표로 바꿀지 물어봐요</span>
+        <div class="field" style="margin-bottom:12px" data-expert>생활 유형 <span class="muted">— 바꾸면 기본 시간표로 바꿀지 물어봐요</span>
           <div class="pick-row" id="lifePick" style="margin-top:6px"></div>
         </div>
-        <div class="field" style="margin-bottom:18px">준비하는 시험 종류 (여러 개) <span class="muted">— 시험 추가 칸의 기본 선택지·추천 과목에 쓰여요</span>
+        <div class="field" style="margin-bottom:18px" data-expert>준비하는 시험 종류 (여러 개) <span class="muted">— 시험 추가 칸의 기본 선택지·추천 과목에 쓰여요</span>
           <div class="pick-row" id="kindPick" style="margin-top:6px"></div>
         </div>
         <table class="week" id="schoolTable">
           <thead><tr><th>요일</th><th id="schoolOnTh">등교</th><th>시작</th><th>끝</th></tr></thead>
           <tbody></tbody>
         </table>
-        <h4 style="margin:22px 0 6px" id="examDayTitle">시험 당일 학교 시간</h4>
-        <p class="muted" style="font-size:13px;margin:0 0 8px">시험 날은 보통 일찍 끝나니까, 남은 오후는 다음 시험 공부에 배정돼요.</p>
-        <div class="grid2">
+        <h4 style="margin:22px 0 6px" id="examDayTitle" data-expert>시험 당일 학교 시간</h4>
+        <p class="muted" style="font-size:13px;margin:0 0 8px" data-expert>시험 날은 보통 일찍 끝나니까, 남은 오후는 다음 시험 공부에 배정돼요.</p>
+        <div class="grid2" data-expert>
           <label class="field">시작<input class="input" type="time" id="examDayStart" /></label>
           <label class="field">끝<input class="input" type="time" id="examDayEnd" /></label>
         </div>
@@ -348,14 +366,14 @@
 
       <div class="tab-pane" data-pane="life">
         <div class="grid2">
-          <label class="field">기상 시간<input class="input" type="time" id="wake" /></label>
-          <label class="field">취침 시간<input class="input" type="time" id="sleep" /></label>
+          <label class="field" data-expert>기상 시간<input class="input" type="time" id="wake" /></label>
+          <label class="field" data-expert>취침 시간<input class="input" type="time" id="sleep" /></label>
           <label class="field">저녁 시작<input class="input" type="time" id="dinnerStart" /></label>
           <label class="field">저녁 끝<input class="input" type="time" id="dinnerEnd" /></label>
           <label class="field"><span id="lunchLabel">점심 시작 (학교 없는 날)</span><input class="input" type="time" id="lunchStart" /></label>
           <label class="field">점심 끝<input class="input" type="time" id="lunchEnd" /></label>
         </div>
-        <div class="grid3">
+        <div class="grid3" data-expert>
           <label class="field">공부 블록 (분)<input class="input" type="number" min="20" max="120" step="5" id="blockMin" /></label>
           <label class="field">쉬는 시간 (분)<input class="input" type="number" min="0" max="60" step="5" id="breakMin" /></label>
           <label class="field"><span id="bufferLabel">학교·학원 전후 이동 (분)</span><input class="input" type="number" min="0" max="120" step="5" id="bufferMin" /></label>
@@ -366,7 +384,7 @@
           </label>
           <label class="field">장기 시험 최소 비중 (%) <span class="muted">— 60일 이상 남은 시험</span><input class="input" type="number" min="0" max="50" step="5" id="minLongShare" /></label>
         </div>
-        <p class="muted" style="font-size:12px;margin:0">장기 시험(예: 수능·자격증)이 가까운 시험에 밀려 0이 되지 않도록 하루 공부 블록의 이 비율만큼은 꼭 배정해요. 다른 시험이 3일 이내로 다가온 날은 가까운 시험에 집중해요.</p>
+        <p class="muted" style="font-size:12px;margin:0" data-expert>장기 시험(예: 수능·자격증)이 가까운 시험에 밀려 0이 되지 않도록 하루 공부 블록의 이 비율만큼은 꼭 배정해요. 다른 시험이 3일 이내로 다가온 날은 가까운 시험에 집중해요.</p>
       </div>
 
       <div class="tab-pane" data-pane="look">
@@ -374,9 +392,23 @@
         <div id="lookPicker"></div>
       </div>
 
+      <!-- 기본 모드 ⑤ 단계: 생활 유형 프리셋 (숨긴 값을 프리셋 기본값으로 채움) -->
+      <div class="tab-pane" data-pane="preset">
+        <div class="pick-grid" id="presetPick"></div>
+        <p class="muted" style="font-size:12px;margin:14px 0 0" id="presetNote"></p>
+      </div>
+
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:22px;border-top:1px dashed var(--line);padding-top:16px">
-        <span class="muted" style="font-size:12px;margin-right:auto;align-self:center">창을 닫으면 바뀐 내용으로 계획이 자동으로 다시 짜여요</span>
-        <button class="btn primary" id="setSave">저장하고 계획 만들기</button>
+        <span class="muted" style="font-size:12px;margin-right:auto;align-self:center" data-expert>창을 닫으면 바뀐 내용으로 계획이 자동으로 다시 짜여요</span>
+        <button class="btn primary" id="setSave" data-expert>저장하고 계획 만들기</button>
+        <button type="button" class="btn ghost" id="stepPrev" data-basic style="margin-right:auto">← 이전</button>
+        <button type="button" class="btn primary" id="stepNext" data-basic>다음 →</button>
+      </div>
+      <div class="mode-row">화면 모드
+        <div class="pick-row" id="modePick">
+          <label><input type="radio" name="uiMode" value="basic"><span>간단하게 설정할래요</span></label>
+          <label><input type="radio" name="uiMode" value="expert"><span>다 설정할래요</span></label>
+        </div>
       </div>
     </div>
   </div>

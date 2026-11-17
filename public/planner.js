@@ -25,6 +25,7 @@ function taskName(t, fallback) {
 
 async function load() {
   data = await api('/day/' + date);
+  Mode.fromSettings(data.settings); // 기본 모드면 달성률·회고·직접 추가·다시 짜기를 숨김 (data-expert)
   render();
 }
 
@@ -36,6 +37,7 @@ function render() {
   $('#nextDay').href = `planner.html?date=${D.add(date, 1)}`;
   $('#todayBtn').href = `planner.html?date=${today}`;
   $('#jump').value = date;
+  $('#weekLink').href = `week.html?start=${D.weekStart(date)}`;
   $('#quote').textContent = '“ ' + QUOTES[D.parse(date).getDate() % QUOTES.length] + ' ”';
 
   $('#ddays').innerHTML = data.exams
@@ -144,7 +146,7 @@ function renderTodos() {
   }).join('') || `<li class="empty-todo"><div class="hand" style="font-size:calc(28px * var(--hand-scale))">${data.tasks.length ? '모두 완료! 수고했어요 🎉' : '이 날은 계획된 공부가 없어요'}</div>
     ${data.tasks.length ? '' : data.planUntil && date > data.planUntil
       ? '<p style="font-size:13px">계획은 오늘부터 4주씩 만들어져요. 이 날짜가 가까워지면 자동으로 이어서 만들어져요.</p>'
-      : '<p style="font-size:13px">설정 창에서 시험을 등록하면 계획이 자동으로 만들어져요. 아래에서 직접 추가해도 돼요.</p>'}</li>`;
+      : `<p style="font-size:13px">설정 창에서 시험을 등록하면 계획이 자동으로 만들어져요.${Mode.basic ? '' : ' 아래에서 직접 추가해도 돼요.'}</p>`}</li>`;
 
   $('#addForm').exam_id.innerHTML = `<option value="">기타</option>` +
     data.exams.filter((e) => e.date >= date).map((e) => `<option value="${e.id}">${esc(examName(e, data.exams))}</option>`).join('');
@@ -348,6 +350,13 @@ setInterval(() => { if (date === D.today()) renderTimeline(); }, 60000);
 
 // ───────── 처음 사용 안내 (이 기기에서 플래너를 처음 열 때 한 번) ─────────
 function plannerTour() {
+  if (Mode.basic) {
+    return runTour([
+      { el: '#todos', title: '오늘 할 일 체크', text: '끝낸 일은 네모를 눌러 체크해요. ⏭를 누르면 내일로 미룰 수 있어요.' },
+      { el: '#timeline', title: '타임테이블', text: '학교·학원·식사 사이 빈 시간에 공부가 배치돼요. 빨간 선이 지금 시각이에요.' },
+      { el: '.timer-card', title: '집중 타이머', text: '25분·50분 집중하고 나면 알림이 울려요.' },
+    ], { doneLabel: '알겠어요' });
+  }
   runTour([
     { el: '#todos', title: '오늘 할 일 체크', text: '끝낸 일은 네모를 눌러 체크해요. 📝로 메모(예: p.45까지 함), ⏭로 내일로 미루기, ✕로 삭제할 수 있어요.' },
     { el: '#timeline', title: '타임테이블', text: '학교·학원·식사 사이 빈 시간에 공부가 배치돼요. 빨간 선이 지금 시각이에요. 블록을 눌러도 체크돼요.' },

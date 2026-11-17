@@ -31,6 +31,13 @@ $('#authForm').onsubmit = async (e) => {
 };
 $('#btnLogout').onclick = () => { Auth.clear(); location.reload(); };
 
+// 날짜를 눌렀을 때 열 주소 (새 창)
+const dayHref = (ds) => (Mode.basic ? `week.html?start=${D.weekStart(ds)}` : `planner.html?date=${ds}`);
+function setTodayLink() {
+  $('#todayLink').href = dayHref(D.today());
+  $('#todayLink').textContent = Mode.basic ? '📖 이번 주 플래너 열기' : '📖 오늘 플래너 열기';
+}
+
 // ───────── 캘린더 ─────────
 async function renderCalendar() {
   const first = new Date(view.y, view.m, 1);
@@ -63,8 +70,9 @@ async function renderCalendar() {
         <small>${info.done}/${info.total} 완료</small></div>
         ${pct === 100 ? '<span class="stamp">참잘</span>' : ''}`;
     }
-    html += `<a class="${cls}" href="planner.html?date=${ds}" target="_blank" rel="opener" title="${D.pretty(ds)} 플래너 열기">
-      <span class="num">${d.getDate()}</span>${info?.mood ? `<span class="mood">${info.mood}</span>` : ''}
+    // 기본 모드: 그 날짜가 들어 있는 주의 주간 플래너 / 전문가 모드: 그날의 하루 플래너
+    html += `<a class="${cls}" href="${dayHref(ds)}" target="_blank" rel="opener" title="${D.pretty(ds)} ${Mode.basic ? '주간 플래너' : '플래너'} 열기">
+      <span class="num">${d.getDate()}</span>${info?.mood ? `<span class="mood" data-expert>${info.mood}</span>` : ''}
       ${stickers}${bottom}</a>`;
   }
   $('#cal').innerHTML = html;
@@ -91,12 +99,13 @@ async function renderSide() {
 
   $('#dlist').innerHTML = exams.map((e) => {
     const n = D.diff(today, e.date);
-    return `<li><a href="planner.html?date=${e.date}" target="_blank" rel="opener" class="${n < 0 ? 'past' : ''}">
+    return `<li><a href="${dayHref(e.date)}" target="_blank" rel="opener" class="${n < 0 ? 'past' : ''}">
       <span class="dot" style="--c:${e.color}"></span>${esc(examName(e, exams))}
       <span class="muted" style="font-size:12px">${D.pretty(e.date)}</span>
       <span class="dd">${dday(n)}</span></a></li>`;
   }).join('') || '<li class="muted" style="font-size:13px">등록된 시험이 없어요</li>';
 
+  if (Mode.basic) return; // 기본 모드는 진행률·통계를 보여 주지 않음
   const st = await api('/stats?today=' + today);
   $('#progList').innerHTML = renderProgress(st.subjects, today);
   $('#stPct').textContent = (st.total ? Math.round((st.done / st.total) * 100) : 0) + '%';
@@ -151,11 +160,84 @@ async function generate() {
 }
 
 // ───────── 설정 모달 ─────────
+const showPane = (name) => $$('.tab-pane').forEach((p) => p.classList.toggle('on', p.dataset.pane === name));
 $$('#tabs button').forEach((b) => (b.onclick = () => {
   $$('#tabs button').forEach((x) => x.classList.toggle('on', x === b));
-  $$('.tab-pane').forEach((p) => p.classList.toggle('on', p.dataset.pane === b.dataset.tab));
+  showPane(b.dataset.tab);
   if (b.dataset.tab === 'look') renderLookPicker($('#lookPicker'));
 }));
+
+// ───────── 기본 모드: 단계형 설정 (같은 설정 창을 한 단계씩 보여 줌) ─────────
+// ① 시험 ② 학교 시간 ③ 학원 ④ 식사 ⑤ 생활 유형 프리셋 → 완료하면 저장 + 계획 자동 생성
+const STEPS = [
+  { pane: 'exam', label: () => '시험', desc: () => '시험 과목과 시험 날짜를 넣어 주세요. 시험 범위 사진이나 공지 글을 올리면 한 번에 채워져요.' },
+  { pane: 'school', label: () => `${fixedName()} 시간`, desc: () => `${fixedName()}에 있는 요일과 시간을 알려 주세요. 이 시간에는 공부 계획을 넣지 않아요.` },
+  { pane: 'academy', label: () => '학원', desc: () => '다니는 학원이 있으면 요일과 시간을 넣어 주세요. 없으면 그냥 다음으로 넘어가도 돼요.' },
+  { pane: 'life', label: () => '식사', desc: () => '밥 먹는 시간을 알려 주세요. 이 시간에도 공부 계획을 넣지 않아요.' },
+  { pane: 'preset', label: () => '생활 유형', desc: () => '나와 가장 비슷한 생활을 하나 골라 주세요. 하루 공부량 같은 나머지 값은 알아서 채워 드려요.' },
+];
+let step = 0;
+function showStep(i) {
+  step = Math.max(0, Math.min(STEPS.length - 1, i));
+  $('#steps').innerHTML = STEPS.map((s, j) => `<button type="button" data-step="${j}" class="${j === step ? 'on' : j < step ? 'done' : ''}">${j + 1}. ${esc(s.label())}</button>`).join('');
+  $('#stepDesc').textContent = STEPS[step].desc();
+  $('#stepPrev').style.visibility = step ? 'visible' : 'hidden';
+  $('#stepNext').textContent = step === STEPS.length - 1 ? '완료하고 계획 만들기 ✓' : '다음 →';
+  if (Mode.basic) showPane(STEPS[step].pane);
+}
+// 시험 칸에 과목·날짜를 적어 놓고 "+ 과목 추가"를 안 누른 채 넘어가면 대신 추가해 줌
+async function flushExamForm() {
+  const f = $('#examForm');
+  if (!f.subject.value.trim() || !f.date.value) return true;
+  return saveExamForm();
+}
+async function goStep(i) {
+  if (step === 0 && i !== 0 && !(await flushExamForm())) return;
+  showStep(i);
+}
+$('#steps').addEventListener('click', (e) => { const j = e.target.dataset.step; if (j !== undefined) goStep(+j); });
+$('#stepPrev').onclick = () => goStep(step - 1);
+$('#stepNext').onclick = async () => {
+  if (step < STEPS.length - 1) return goStep(step + 1);
+  // 완료: 설정 저장 → (시험이 있으면) 계획 자동 생성
+  readSettings();
+  const life = $('#presetPick input:checked')?.value || settings.lifeType;
+  // 생활 유형을 바꿨을 때만 숨긴 값(시험 당일 시간·이동 시간·하루 최대 공부량)을 그 유형 기본값으로 채움
+  //  — 직접 입력한 학교·학원·식사 시간은 그대로, 같은 유형이면 전문가 모드에서 고친 값도 그대로
+  if (life !== settings.lifeType) settings = applyLifeHidden({ ...settings, lifeType: life }, life);
+  try {
+    settings = await api('/settings', { method: 'PUT', body: { ...settings, mode: Mode.get(), ...Look.get() } });
+  } catch (e) { return toast(e.message); }
+  if (!exams.some((e) => e.date >= D.today())) {
+    dirty = true;
+    showStep(0);
+    return toast('시간표는 저장했어요. 시험을 하나 이상 넣어야 공부 계획을 만들 수 있어요', 3600);
+  }
+  dirty = true;
+  await closeSettings();
+};
+function renderPresetPick() {
+  $('#presetPick').innerHTML = Presets.LIFE_IDS.map((id) => { const t = Presets.LIFE_TYPES[id], d = t.defaults;
+    const sub = d ? `하루 최대 공부 ${fmtMin(d.maxWeekdayMin)} · 쉬는 날 ${fmtMin(d.maxWeekendMin)}` : '지금 값을 그대로 써요';
+    return `<label class="pick-card"><input type="radio" name="presetLife" value="${id}" ${settings.lifeType === id ? 'checked' : ''}><span><span class="ic">${t.icon}</span><b>${t.label}</b><small>${t.desc}<br>${sub}</small></span></label>`; }).join('');
+  $('#presetNote').textContent = '기상·취침 시간, 공부 블록 길이(50분), 시험 당일 시간은 기본값으로 넣어 둬요. 「다 설정할래요」로 바꾸면 직접 고칠 수 있어요.';
+}
+
+// ───────── 화면 모드 바꾸기 (설정 창 아래) — 데이터는 그대로, 보이는 것만 바뀜 ─────────
+$('#modePick').addEventListener('change', async (e) => {
+  const mode = e.target.value;
+  readSettings();
+  try {
+    const saved = await Mode.set(mode);
+    if (saved) settings.mode = saved.mode;
+  } catch (err) { toast(err.message); }
+  showStep(0);
+  if (!Mode.basic) { $$('#tabs button').forEach((x) => x.classList.toggle('on', x.dataset.tab === 'exam')); showPane('exam'); }
+  renderExamList();
+  setTodayLink();
+  await refresh();
+  toast(`「${MODE_NAMES[mode]}」 화면으로 바꿨어요. 입력한 내용은 그대로예요`, 2800);
+});
 
 async function openSettings() {
   settings = await api('/settings');
@@ -164,6 +246,10 @@ async function openSettings() {
   renderExamList();
   resetExamForm();
   dirty = false;
+  $$('#modePick input').forEach((r) => (r.checked = r.value === Mode.get()));
+  renderPresetPick();
+  showStep(0);
+  if (!Mode.basic) showPane($('#tabs button.on')?.dataset.tab || 'exam');
   $('#setOv').classList.add('open');
 }
 window.openSettings = openSettings;
@@ -172,6 +258,7 @@ $('#btnSettings').onclick = openSettings;
 async function closeSettings() {
   $('#setOv').classList.remove('open');
   if (dirty) { dirty = false; if (exams.some((e) => e.date >= D.today())) await generate(); else await refresh(); }
+  if (afterSettings) { const fn = afterSettings; afterSettings = null; fn(); }
 }
 $('#setClose').onclick = closeSettings;
 $('#setOv').addEventListener('mousedown', (e) => { if (e.target.id === 'setOv') closeSettings(); });
@@ -216,6 +303,12 @@ function renderLifePick() {
   $('#kindPick').innerHTML = Presets.KIND_IDS.map((id) =>
     `<label><input type="checkbox" value="${id}" ${s.examKinds.includes(id) ? 'checked' : ''}><span>${Presets.EXAM_KINDS[id].label}</span></label>`).join('');
 }
+// 기본 모드 프리셋: 화면에 안 보이는 값만 채움 (학교 시간표는 직접 입력한 대로 둠)
+function applyLifeHidden(s, id) {
+  const d = Presets.LIFE_TYPES[id]?.defaults;
+  if (!d) return s;
+  return { ...s, examDay: { ...d.examDay }, bufferMin: d.bufferMin, maxWeekdayMin: d.maxWeekdayMin, maxWeekendMin: d.maxWeekendMin };
+}
 // 생활 유형의 기본 시간표 넣기 (학교/강의/근무 요일·시간, 시험 당일, 이동 시간, 하루 최대 공부)
 function applyLifeDefaults(s, id) {
   const d = Presets.LIFE_TYPES[id]?.defaults;
@@ -252,7 +345,8 @@ function renderKindSelect(selected) {
 function onKindChange() {
   const k = Presets.EXAM_KINDS[$('#examKind').value] || Presets.EXAM_KINDS.naesin;
   $('#suggest').innerHTML = k.suggest.map((x) => `<button type="button" data-sug="${esc(x)}">${esc(x)}</button>`).join('') || '<span class="muted" style="font-size:12px">직접 입력해 주세요</span>';
-  $('#scopeLabel').textContent = `시험 범위 — ${k.unit}를 쉼표(,)로 구분하면 ${k.unit}별로 나눠서 계획해요`;
+  const eul = (k.unit.charCodeAt(k.unit.length - 1) - 0xac00) % 28 ? '을' : '를'; // 받침 있으면 "을" (단원을 / 파트를)
+  $('#scopeLabel').textContent = `시험 범위 — ${k.unit}${eul} 쉼표(,)로 구분하면 ${k.unit}별로 나눠서 계획해요`;
   $('#examForm').scope.placeholder = `예) ${k.unitEx}`;
   $('#stagesRow').hidden = $('#examKind').value !== 'custom';
 }
@@ -307,7 +401,7 @@ function readSettings() {
   s.examKinds = $$('#kindPick input:checked').map((c) => c.value);
   readAcademies();
 }
-$('#setOv').addEventListener('input', (e) => { if (e.target.closest('#kindPick')) return; if (!e.target.closest('#examForm') && !e.target.closest('[data-pane=look]') && !e.target.closest('.quick')) dirty = true; });
+$('#setOv').addEventListener('input', (e) => { if (e.target.closest('#kindPick') || e.target.closest('#modePick')) return; if (!e.target.closest('#examForm') && !e.target.closest('[data-pane=look]') && !e.target.closest('.quick')) dirty = true; });
 $('#setSave').onclick = async () => {
   readSettings();
   try {
@@ -323,27 +417,30 @@ function renderExamList() {
   $('#examList').innerHTML = exams.map((e) => `<div class="list-card">
     <span class="dot" style="width:14px;height:14px;border-radius:50%;background:${e.color};flex:none"></span>
     <div class="grow"><b>${esc(examName(e, exams))}</b> <span class="muted" style="font-size:13px">${D.pretty(e.date)} · ${dday(D.diff(today, e.date))}</span>
-      <div style="font-size:13px"><span class="stars">${'★'.repeat(e.difficulty)}${'☆'.repeat(5 - e.difficulty)}</span>
-      ${e.priority && e.priority !== 'normal' ? `<span class="chip" style="--c:${e.priority === 'high' ? 'var(--accent)' : 'var(--line)'}">우선순위 ${Presets.PRIORITY[e.priority].label}</span>` : ''}
+      <div style="font-size:13px"><span class="stars" data-expert>${'★'.repeat(e.difficulty)}${'☆'.repeat(5 - e.difficulty)}</span>
+      ${e.priority && e.priority !== 'normal' ? `<span class="chip" data-expert style="--c:${e.priority === 'high' ? 'var(--accent)' : 'var(--line)'}">우선순위 ${Presets.PRIORITY[e.priority].label}</span>` : ''}
       ${e.kind === 'custom' && e.stages ? `<span class="chip" style="--c:var(--sage)">${esc(stagesText(e.stages).replace(/, /g, ' → '))}</span>` : ''}
-      ${e.pref_days ? `<span class="chip" style="--c:var(--sky)">${String(e.pref_days).split(',').map((d) => DAY_KO[d]).join('·')} 선호</span>` : ''}
+      ${e.pref_days ? `<span class="chip" data-expert style="--c:var(--sky)">${String(e.pref_days).split(',').map((d) => DAY_KO[d]).join('·')} 선호</span>` : ''}
       <span class="muted">${esc(e.scope) || '범위 미입력'}</span></div></div>
     <button class="btn small ghost" data-edit="${e.id}">수정</button>
     <button class="x" data-rm="${e.id}" title="삭제">✕</button></div>`).join('')
-    || '<p class="muted" style="font-size:14px">시험 과목을 추가해 주세요. 예) 국어 · 11/24 · ★★★</p>';
+    || `<p class="muted" style="font-size:14px">시험 과목을 추가해 주세요. 예) 국어 · 11/24${Mode.basic ? '' : ' · ★★★'}</p>`;
 }
 function resetExamForm() {
   const f = $('#examForm');
   f.reset(); f.id.value = '';
-  f.color.value = ['#e07a5f', '#81b29a', '#7fa7c9', '#f2b84b', '#b48ead', '#e8998d', '#6d9dc5', '#a3b86c', '#d4a373', '#9a8c98'][exams.length % 10];
+  const palette = ['#e07a5f', '#81b29a', '#7fa7c9', '#f2b84b', '#b48ead', '#e8998d', '#6d9dc5', '#a3b86c', '#d4a373', '#9a8c98'];
+  f.color.value = palette[exams.length % 10];
+  // 기본 모드는 색상 칸이 없으므로, 이미 쓴 색과 겹치지 않게 골라 줌
+  if (Mode.basic) f.color.value = palette.find((c) => !exams.some((e) => e.color === c)) || f.color.value;
   $('#examSubmit').textContent = '+ 과목 추가';
   $('#examCancel').hidden = true;
   renderKindSelect((settings.examKinds || ['naesin'])[0]);
 }
 $('#examCancel').onclick = resetExamForm;
-$('#examForm').onsubmit = async (e) => {
-  e.preventDefault();
-  const f = e.target;
+$('#examForm').onsubmit = (e) => { e.preventDefault(); saveExamForm(); };
+async function saveExamForm() {
+  const f = $('#examForm');
   const body = { subject: f.subject.value, date: f.date.value, difficulty: +f.difficulty.value, scope: f.scope.value, color: f.color.value,
     pref_days: $$('#prefDays input:checked').map((c) => +c.value),
     kind: f.kind.value, priority: f.priority.value, stages: parseStages(f.stages.value) };
@@ -354,8 +451,9 @@ $('#examForm').onsubmit = async (e) => {
     dirty = true;
     renderExamList(); resetExamForm();
     toast('시험 과목을 저장했어요');
-  } catch (err) { toast(err.message); }
-};
+    return true;
+  } catch (err) { toast(err.message); return false; }
+}
 $('#examList').addEventListener('click', async (e) => {
   const edit = e.target.dataset.edit, rm = e.target.dataset.rm;
   if (edit) {
@@ -508,7 +606,7 @@ function renderCands() {
       <button type="button" class="x" data-rmc="${i}" title="빼기">✕</button></div>`).join('')}
   </div>
   <div class="cand-foot">
-    <label class="muted" style="font-size:13px">시험 종류 <select class="input" id="candKind" style="width:auto;display:inline-block;margin:0">${(settings?.examKinds || ['naesin']).concat(Presets.KIND_IDS.filter((k) => !(settings?.examKinds || ['naesin']).includes(k) && k !== 'custom'))
+    <label class="muted" style="font-size:13px" data-expert>시험 종류 <select class="input" id="candKind" style="width:auto;display:inline-block;margin:0">${(settings?.examKinds || ['naesin']).concat(Presets.KIND_IDS.filter((k) => !(settings?.examKinds || ['naesin']).includes(k) && k !== 'custom'))
       .filter((k) => k !== 'custom').map((k) => `<option value="${k}">${Presets.EXAM_KINDS[k].label}</option>`).join('')}</select></label>
     <button type="button" class="btn small primary" id="candAdd">✔ 선택한 과목 모두 추가</button>
     <button type="button" class="btn small ghost" data-reset>취소</button>
@@ -566,18 +664,45 @@ $('#qStatus').addEventListener('click', async (e) => {
 
 // ───────── 시작 ─────────
 async function boot(isNew) {
+  settings = await api('/settings').catch(() => settings);
+  Look.fromSettings(settings);
+  Mode.fromSettings(settings); // 화면을 보여 주기 전에 모드부터 적용
   $('#app').hidden = false;
-  api('/settings').then((s) => Look.fromSettings(s)).catch(() => {});
   api('/config').then((c) => {
     cfg = c;
     $('#aiBadge').textContent = c.ai ? 'AI 인식' : '무료 자동 인식';
   }).catch(() => {});
   $('#uname').textContent = Auth.user;
-  $('#todayLink').href = `planner.html?date=${D.today()}`;
-  settings = await api('/settings').catch(() => settings);
+  setTodayLink();
   await refresh();
   if (await Plan.ensure()) await refresh();
-  if (isNew) { await runOnboarding(); startTour(true); }
+  if (!isNew) return;
+  // 가입 직후: 화면 모드 고르기 → (기본) 단계형 설정 → 짧은 안내 / (전문가) 생활 유형·시험 종류 → 안내
+  if ((await chooseMode()) === 'basic') {
+    await openSettings();
+    await new Promise((done) => { afterSettings = done; });
+    startTour();
+  } else { await runOnboarding(); startTour(true); }
+}
+
+// ───────── 가입 직후: 화면 모드 선택 ("간단하게 설정할래요" / "다 설정할래요") ─────────
+let afterSettings = null; // 설정 창이 닫힌 뒤 한 번 실행
+function chooseMode() {
+  return new Promise((resolve) => {
+    $('#modeOv').classList.add('open');
+    $('#modeOv').onclick = async (e) => {
+      const b = e.target.closest('button[data-mode]');
+      if (!b) return;
+      $$('#modeOv button').forEach((x) => (x.disabled = true));
+      try { const saved = await Mode.set(b.dataset.mode); if (saved) settings = saved; }
+      catch (err) { toast(err.message); }
+      $$('#modeOv button').forEach((x) => (x.disabled = false));
+      $('#modeOv').classList.remove('open');
+      setTodayLink();
+      await refresh();
+      resolve(Mode.get());
+    };
+  });
 }
 
 // ───────── 가입 직후: ① 생활 유형 ② 준비하는 시험 종류 ─────────
@@ -628,6 +753,14 @@ function runOnboarding() {
 
 // ───────── 처음 사용 안내 ─────────
 function startTour(isNew = false) {
+  if (Mode.basic) {
+    // 기본 모드: 짧은 안내 3단계
+    return runTour([
+      { el: '#btnSettings', title: '① 시험·시간표 넣기', text: `여기서 <b>시험</b>과 <b>${fixedName()}·학원·식사 시간</b>을 차례대로 넣으면 <b>공부 계획이 자동으로</b> 만들어져요. 언제든 다시 고칠 수 있어요.` },
+      { el: '#cal', title: '② 날짜를 누르면 주간 플래너', text: '날짜를 누르면 <b>그 주의 할 일</b>이 새 창으로 열려요. 끝낸 일을 체크하면 이 달력에도 바로 표시돼요.' },
+      { el: '#bigDday', title: '③ 시험까지 남은 날', text: '가장 가까운 시험까지 며칠 남았는지 여기서 볼 수 있어요. 사용법은 <b>❓ 사용법 보기</b>로 다시 볼 수 있어요.' },
+    ], { doneLabel: exams.length ? '시작하기' : '시험 넣으러 가기 →', onDone: () => { if (!exams.length) openSettings(); } });
+  }
   runTour([
     { el: null, title: '반가워요! 👋', text: `시험 날짜와 ${fixedName()}·학원 시간만 넣으면 <b>시험 공부 계획을 자동으로</b> 짜 주는 플래너예요. 사용법을 1분 안에 알려 드릴게요.` },
     { el: '#btnSettings', title: '① 시험·시간표 입력', text: `여기서 <b>시험 과목·날짜</b>와 <b>${fixedName()}·학원 시간</b>, 기상·취침 시간을 넣어요. 창을 닫으면 <b>공부 계획이 자동으로</b> 만들어져요.<br>시험 범위는 공지 <b>사진·캡처를 올리거나 글을 붙여넣으면</b> 과목별로 자동 정리돼요.` },

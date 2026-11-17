@@ -368,19 +368,41 @@ app.get('/api/summary', auth, h(async (req, res) => {
   res.json({ days, exams: await getExams(req.uid) });
 }));
 
-// ── 하루 플래너 ──
+// ── 하루 플래너 / 주간 플래너 ──
+// 날짜 목록(연속)을 받아 날짜마다 같은 형태의 데이터를 돌려줌 (조회는 기간으로 한 번씩만)
+async function dayPayloads(uid, dates) {
+  const from = dates[0], to = dates[dates.length - 1];
+  const settings = await getSettings(uid);
+  const exams = await getExams(uid);
+  const tasks = await db.all(`
+    SELECT t.*, e.color FROM tasks t LEFT JOIN exams e ON e.id=t.exam_id
+    WHERE t.user_id=? AND t.date BETWEEN ? AND ? ORDER BY t.date, t.start IS NULL, t.start, t.id`, [uid, from, to]);
+  const memos = {};
+  for (const m of await db.all('SELECT date, text, mood, focus_min FROM memos WHERE user_id=? AND date BETWEEN ? AND ?', [uid, from, to])) {
+    memos[m.date] = { text: m.text, mood: m.mood, focus_min: m.focus_min };
+  }
+  const planUntil = (await db.get('SELECT plan_until FROM users WHERE id=?', [uid]))?.plan_until || '';
+  const view = { wake: settings.wake, sleep: settings.sleep, blockMin: settings.blockMin, mode: settings.mode };
+  return dates.map((date) => ({
+    date, settings: view,
+    fixed: S.fixedBlocksFor(date, settings, exams.filter((e) => e.date === date)),
+    tasks: tasks.filter((t) => t.date === date),
+    exams,
+    memo: memos[date] || { text: '', mood: '', focus_min: 0 },
+    planUntil,
+  }));
+}
 app.get('/api/day/:date', auth, h(async (req, res) => {
   const date = req.params.date;
   if (!isDate(date)) return bad(res, '날짜가 올바르지 않아요');
-  const settings = await getSettings(req.uid);
-  const exams = await getExams(req.uid);
-  const tasks = await db.all(`
-    SELECT t.*, e.color FROM tasks t LEFT JOIN exams e ON e.id=t.exam_id
-    WHERE t.user_id=? AND t.date=? ORDER BY t.start IS NULL, t.start, t.id`, [req.uid, date]);
-  const fixed = S.fixedBlocksFor(date, settings, exams.filter((e) => e.date === date));
-  const memo = (await db.get('SELECT text, mood, focus_min FROM memos WHERE user_id=? AND date=?', [req.uid, date])) || { text: '', mood: '', focus_min: 0 };
-  const planUntil = (await db.get('SELECT plan_until FROM users WHERE id=?', [req.uid]))?.plan_until || '';
-  res.json({ date, settings: { wake: settings.wake, sleep: settings.sleep, blockMin: settings.blockMin }, fixed, tasks, exams, memo, planUntil });
+  res.json((await dayPayloads(req.uid, [date]))[0]);
+}));
+// 주간 플래너: from부터 7일 치를 한 번에 (days의 각 항목 = /api/day와 같은 형태)
+app.get('/api/week', auth, h(async (req, res) => {
+  const from = req.query.from;
+  if (!isDate(from)) return bad(res, '날짜가 올바르지 않아요');
+  const dates = Array.from({ length: 7 }, (_, i) => S.addDays(from, i));
+  res.json({ from, to: dates[6], days: await dayPayloads(req.uid, dates) });
 }));
 
 // ── 할 일 ──
