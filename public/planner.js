@@ -443,9 +443,9 @@ function renderWeek() {
         </div></li>`).join('');
     // 날짜를 누르면 하루 보기로 (전문가: 같은 창에서 이동 / 기본: 새 창)
     return `<section class="${cls}" data-date="${d.date}">
-      <a class="wd-head" href="${href(d.date, 'day')}" ${Mode.basic ? 'target="_blank" rel="opener"' : ''} title="${D.pretty(d.date)} 하루 보기">
+      <a class="wd-head" href="${href(d.date, 'day')}" ${Mode.basic ? 'target="_blank" rel="opener"' : ''} title="${D.pretty(d.date)} 하루 계획 보기">
         <span class="dn">${DAY_KO[dow]}</span><span class="num">${n}</span>${d.date === today ? '<span class="todaytag">오늘</span>' : ''}
-        <span class="go">${Mode.basic ? '자세히 ↗' : '하루 보기 ›'}</span></a>
+        <span class="go">${Mode.basic ? '자세히 ↗' : '하루 계획 보기 ›'}</span></a>
       ${stickers}
       ${fx ? `<div class="fx" title="${esc(fx)}">${esc(fx)}</div>` : ''}
       <ul class="wtodos">${items || `<li class="wempty">${d.planUntil && d.date > d.planUntil ? '가까워지면 계획이 만들어져요' : '할 일이 없어요'}</li>`}</ul>

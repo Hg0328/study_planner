@@ -96,6 +96,17 @@
     low: { label: '낮음', weight: 0.6 },
   };
 
+  // 단계 올리기: 처음엔 하루 공부량을 적게, 날이 갈수록 블록 1개씩 늘려 '하루 최대 공부량'까지
+  //  하루 상한 = min(최대 공부량, 시작값 + 블록 길이 × floor(시작일부터 지난 날 ÷ 주기))
+  //  start: 최대 공부량에 곱하는 비율 / startBlocks: 블록 개수로 시작 (둘 중 하나)
+  const RAMP = {
+    off: { label: '끄기', desc: '처음부터 하루 최대 공부량으로 계획해요' },
+    slow: { label: '천천히', start: 0.5, period: 3, desc: '최대의 절반에서 시작해 3일마다 블록 1개씩 늘려요' },
+    normal: { label: '보통', start: 0.5, period: 2, desc: '최대의 절반에서 시작해 2일마다 블록 1개씩 늘려요' },
+    fast: { label: '빠르게', startBlocks: 1, period: 1, desc: '블록 1개에서 시작해 매일 블록 1개씩 늘려요' },
+  };
+  const RAMP_RELEASE_DAYS = 7; // 시험이 이 일수 안으로 다가온 날은 단계 올리기를 풀고 최대 공부량으로
+
   const LONG_TERM_DAYS = 60;  // 이 일수 이상 남은 시험 = 장기 시험
   const LONG_TERM_OFF_DAYS = 3; // 다른 시험이 D-3 ~ 당일이면 최소 비중 해제
 
@@ -131,7 +142,7 @@
   const examLabel = (exam, exams) => (showKinds(exams) ? `${exam.subject} · ${kindLabel(exam.kind)}` : exam.subject);
 
   const Presets = {
-    LIFE_TYPES, EXAM_KINDS, PRIORITY, LONG_TERM_DAYS, LONG_TERM_OFF_DAYS,
+    LIFE_TYPES, EXAM_KINDS, PRIORITY, LONG_TERM_DAYS, LONG_TERM_OFF_DAYS, RAMP, RAMP_IDS: Object.keys(RAMP), RAMP_RELEASE_DAYS,
     LIFE_IDS: Object.keys(LIFE_TYPES), KIND_IDS: Object.keys(EXAM_KINDS), PRIORITY_IDS: Object.keys(PRIORITY),
     cleanStages, stagesFor, kindLabel, kindGroupLabel, showKinds, examLabel,
     fixedLabel: (lifeType) => (LIFE_TYPES[lifeType] || LIFE_TYPES.student).fixedLabel,

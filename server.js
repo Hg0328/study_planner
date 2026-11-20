@@ -116,7 +116,8 @@ app.get('/api/me', auth, h(async (req, res) => {
 app.get('/api/settings', auth, h(async (req, res) => res.json(await getSettings(req.uid))));
 app.put('/api/settings', auth, h(async (req, res) => {
   const s = S.sanitizeSettings(req.body || {});
-  await db.run('UPDATE users SET settings=? WHERE id=?', [JSON.stringify(s), req.uid]);
+  // 단계 올리기를 끄면 시작일을 지움 → 나중에 다시 켜면 그다음 계획을 만드는 날부터 새로 셈 (A·B·C끼리 바꿀 때는 유지)
+  await db.run(`UPDATE users SET settings=?${s.ramp === 'off' ? ", ramp_start=''" : ''} WHERE id=?`, [JSON.stringify(s), req.uid]);
   res.json(s);
 }));
 
@@ -295,7 +296,7 @@ app.post('/api/generate', auth, h(async (req, res) => {
   if (!isDate(today)) return bad(res, '날짜가 올바르지 않아요');
   const extend = b.mode === 'extend';
   const until = S.addDays(today, PLAN_DAYS - 1);
-  const user = await db.get('SELECT plan_until, plan_from FROM users WHERE id=?', [req.uid]);
+  const user = await db.get('SELECT plan_until, plan_from, ramp_start FROM users WHERE id=?', [req.uid]);
   let startDate = isDate(b.startDate) ? b.startDate : today;
   if (extend) {
     const pu = user?.plan_until || '';
@@ -323,7 +324,9 @@ app.post('/api/generate', auth, h(async (req, res) => {
       doneCount[r.exam_id] = (doneCount[r.exam_id] || 0) + r.c; doneMin[r.exam_id] = (doneMin[r.exam_id] || 0) + r.m;
     }
   }
-  const { tasks: plan, simMin } = S.buildPlan({ settings, exams, keepTasks, startDate, until, doneCount });
+  // 단계 올리기 시작일: 켜져 있는데 아직 없으면 오늘(처음 계획을 만든 날 / 켠 뒤 처음 만든 날)
+  const rampStart = settings.ramp === 'off' ? '' : user?.ramp_start || today;
+  const { tasks: plan, simMin } = S.buildPlan({ settings, exams, keepTasks, startDate, until, doneCount, rampStart });
   const lastExam = exams[exams.length - 1].date;
   const planUntil = until < lastExam ? until : lastExam;
   await db.batch([
@@ -333,10 +336,10 @@ app.post('/api/generate', auth, h(async (req, res) => {
       args: [req.uid, t.date, t.start, t.end, t.exam_id, t.subject, t.title, t.kind],
     })),
     ...exams.map((e) => ({ sql: 'UPDATE exams SET expected_min=? WHERE id=? AND user_id=?', args: [(doneMin[e.id] || 0) + (simMin[e.id] || 0), e.id, req.uid] })),
-    { sql: 'UPDATE users SET plan_until=?, plan_from=? WHERE id=?', args: [planUntil, planFrom, req.uid] },
+    { sql: 'UPDATE users SET plan_until=?, plan_from=?, ramp_start=? WHERE id=?', args: [planUntil, planFrom, rampStart, req.uid] },
   ]);
   const studyMin = plan.reduce((a, t) => a + (t.start != null ? t.end - t.start : 0), 0);
-  res.json({ created: plan.length, studyMin, from: startDate, to: planUntil, planUntil, lastExam });
+  res.json({ created: plan.length, studyMin, from: startDate, to: planUntil, planUntil, lastExam, rampStart });
 }));
 
 // 이어 생성이 필요한지 (달력·플래너를 열 때 확인)
@@ -382,9 +385,9 @@ async function dayPayloads(uid, dates) {
     memos[m.date] = { text: m.text, mood: m.mood, focus_min: m.focus_min };
   }
   const planUntil = (await db.get('SELECT plan_until FROM users WHERE id=?', [uid]))?.plan_until || '';
-  const view = { wake: settings.wake, sleep: settings.sleep, blockMin: settings.blockMin, mode: settings.mode, plannerView: settings.plannerView };
+  const view = { blockMin: settings.blockMin, mode: settings.mode, plannerView: settings.plannerView };
   return dates.map((date) => ({
-    date, settings: view,
+    date, settings: { ...S.wakeSleepFor(settings, date), ...view }, // 기상·취침은 그날 요일 값
     fixed: S.fixedBlocksFor(date, settings, exams.filter((e) => e.date === date)),
     tasks: tasks.filter((t) => t.date === date),
     exams,

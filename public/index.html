@@ -266,6 +266,7 @@
         <button data-tab="academy">🎒 학원</button>
         <button data-tab="life">🌙 생활 패턴</button>
         <button data-tab="look">🎨 꾸미기</button>
+        <button data-tab="advanced">🔧 고급</button>
       </div>
 
       <div class="tab-pane on" data-pane="exam">
@@ -375,13 +376,8 @@
         </div>
         <div class="grid3" data-expert>
           <label class="field">공부 블록 (분)<input class="input" type="number" min="20" max="120" step="5" id="blockMin" /></label>
-          <label class="field">쉬는 시간 (분)<input class="input" type="number" min="0" max="60" step="5" id="breakMin" /></label>
-          <label class="field"><span id="bufferLabel">학교·학원 전후 이동 (분)</span><input class="input" type="number" min="0" max="120" step="5" id="bufferMin" /></label>
           <label class="field"><span id="maxWeekdayLabel">학교 가는 날 최대 공부 (시간)</span><input class="input" type="number" min="0" max="15" step="0.5" id="maxWeekday" /></label>
           <label class="field">쉬는 날 최대 공부 (시간)<input class="input" type="number" min="0" max="15" step="0.5" id="maxWeekend" /></label>
-          <label class="field" style="display:flex;align-items:center;gap:8px;padding-top:18px">
-            <input type="checkbox" id="reviewSlot" /> 하루 마지막은 복습 시간으로
-          </label>
           <label class="field">장기 시험 최소 비중 (%) <span class="muted">— 60일 이상 남은 시험</span><input class="input" type="number" min="0" max="50" step="5" id="minLongShare" /></label>
         </div>
         <p class="muted" style="font-size:12px;margin:0" data-expert>장기 시험(예: 수능·자격증)이 가까운 시험에 밀려 0이 되지 않도록 하루 공부 블록의 이 비율만큼은 꼭 배정해요. 다른 시험이 3일 이내로 다가온 날은 가까운 시험에 집중해요.</p>
@@ -392,10 +388,54 @@
         <div id="lookPicker"></div>
       </div>
 
+      <!-- 고급 (전문가 모드): 계획을 짜는 세부 규칙. 기본값이면 계획 결과는 전과 같음 -->
+      <div class="tab-pane adv" data-pane="advanced">
+        <div class="adv-top">
+          <p class="muted" style="font-size:13px;margin:0">계획을 짜는 세부 규칙이에요. 처음 값 그대로 두면 지금까지와 똑같이 계획돼요.</p>
+          <button type="button" class="btn small ghost" id="advReset">↺ 기본값으로 되돌리기</button>
+        </div>
+
+        <h4>단계 올리기</h4>
+        <p class="adv-desc">처음에는 하루 공부량을 적게 잡고, 날이 갈수록 블록 1개(<span class="advBlock">50</span>분)씩 늘려서 「하루 최대 공부량」까지 올려요. 시험이 7일 안으로 다가오면 최대 공부량으로 계획해요.</p>
+        <div class="ramp-pick" id="rampPick"></div>
+
+        <h4>이동 시간</h4>
+        <div class="grid2">
+          <label class="field"><span id="bufferLabel">학교·학원 가기 전 (분)</span><input class="input" type="number" min="0" max="120" step="5" id="bufferMin" />
+            <small class="adv-desc">시작 시간보다 이만큼 먼저 공부를 끝내요 (준비·이동)</small></label>
+          <label class="field"><span id="bufferAfterLabel">학교·학원 끝난 뒤 (분)</span><input class="input" type="number" min="0" max="120" step="5" id="bufferAfterMin" />
+            <small class="adv-desc">끝나고 이만큼 지난 뒤부터 공부를 넣어요 (귀가·휴식)</small></label>
+        </div>
+
+        <h4>블록 · 복습</h4>
+        <div class="grid2">
+          <label class="field">쉬는 시간 (분)<input class="input" type="number" min="0" max="60" step="5" id="breakMin" />
+            <small class="adv-desc">공부 블록과 블록 사이에 쉬는 시간</small></label>
+          <label class="field">과목별 하루 최대 블록<input class="input" type="number" min="0" max="12" step="1" id="maxBlocksPerSubject" />
+            <small class="adv-desc">한 과목이 하루에 받을 수 있는 블록 수 (0 = 제한 없음). 다 차면 다른 과목에 넘기고, 남으면 비워 둬요</small></label>
+        </div>
+        <label class="field adv-check"><input type="checkbox" id="reviewSlot" /> 하루 마지막 블록은 「복습 & 오답노트」로
+          <small class="adv-desc">블록이 3개 이상인 날, 마지막 블록을 그날 공부한 내용 복습에 써요</small></label>
+
+        <h4>요일별 기상 · 취침</h4>
+        <label class="field adv-check"><input type="checkbox" id="wsOn" /> 요일마다 다르게 정하기
+          <small class="adv-desc">끄면 「생활 패턴」 탭의 기상·취침 시간을 매일 써요 (기상 후 30분은 준비 시간)</small></label>
+        <table class="week" id="wsTable" hidden>
+          <thead><tr><th>요일</th><th>기상</th><th>취침</th></tr></thead><tbody></tbody>
+        </table>
+
+        <h4>공부 단계 비율 (%)</h4>
+        <p class="adv-desc">시험까지 공부 블록을 단계별로 나누는 비율이에요. 합이 100이 아니면 비율대로 맞춰요(단계마다 5~90). 직접 설정 시험은 시험마다 정한 비율을 써요.</p>
+        <div id="ratioList"></div>
+      </div>
+
       <!-- 기본 모드 ⑤ 단계: 생활 유형 프리셋 (숨긴 값을 프리셋 기본값으로 채움) -->
       <div class="tab-pane" data-pane="preset">
         <div class="pick-grid" id="presetPick"></div>
         <p class="muted" style="font-size:12px;margin:14px 0 0" id="presetNote"></p>
+        <h4 style="margin:20px 0 4px">공부량 점점 늘리기 (단계 올리기)</h4>
+        <p class="adv-desc" style="margin:0 0 8px">처음엔 적게 시작해서 날이 갈수록 조금씩 늘려 가요. 시험 7일 전부터는 하루 최대 공부량으로 계획해요.</p>
+        <div class="ramp-pick" id="rampPickBasic"></div>
       </div>
 
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:22px;border-top:1px dashed var(--line);padding-top:16px">

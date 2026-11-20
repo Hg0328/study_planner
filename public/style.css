@@ -244,3 +244,20 @@ table.week th { color: var(--muted); font-size: 13px; }
 .mode-cards b { display: block; font-size: 17px; margin: 6px 0 6px; }
 .mode-cards small { color: var(--muted); font-size: 13px; line-height: 1.5; display: block; }
 .mode-cards .ic { font-size: 26px; }
+
+/* 고급 탭 · 단계 올리기 선택 */
+.adv h4 { margin: 20px 0 6px; }
+.adv-top { display: flex; align-items: center; gap: 10px; justify-content: space-between; flex-wrap: wrap; padding-bottom: 10px; border-bottom: 1px dashed var(--line); }
+.adv-desc { display: block; font-size: 12px; color: var(--muted); margin: 2px 0 8px; line-height: 1.5; }
+.adv-check { display: block; }
+.adv-check input { vertical-align: -2px; margin-right: 4px; }
+.ramp-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.ramp-pick label { cursor: pointer; }
+.ramp-pick input { display: none; }
+.ramp-pick span { display: block; height: 100%; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--paper); font-size: 12px; color: var(--muted); line-height: 1.45; }
+.ramp-pick b { display: block; font-size: 14px; color: var(--ink); margin-bottom: 2px; }
+.ramp-pick input:checked + span { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+.ratio-row { display: grid; grid-template-columns: 120px repeat(3, 1fr); gap: 8px; align-items: end; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+.ratio-row .field { margin: 0; font-size: 12px; }
+.ratio-row .field .input { padding: 2px 2px; }
+@media (max-width: 560px) { .ratio-row { grid-template-columns: 1fr 1fr 1fr; } .ratio-row > b { grid-column: 1 / -1; } }
