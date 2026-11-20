@@ -33,7 +33,8 @@ const DEFAULT_SETTINGS = {
   academies: [], // { name, days:[1,3], start, end }
   lunch: { start: '12:00', end: '13:00' },   // 학교 없는 날 점심
   dinner: { start: '18:00', end: '19:00' },
-  bufferMin: 30,     // 학교·학원 전후 이동/휴식 시간
+  bufferMin: 30,     // 학교·학원 가기 전 이동/준비 시간
+  bufferAfterMin: 30, // 학교·학원 끝난 뒤 이동/휴식 시간 (저장된 값이 없으면 bufferMin과 같게)
   blockMin: 50,      // 공부 블록 길이
   breakMin: 10,      // 블록 사이 쉬는 시간
   maxWeekdayMin: 240,
@@ -42,6 +43,10 @@ const DEFAULT_SETTINGS = {
   lifeType: 'student',     // 생활 유형 (presets.LIFE_TYPES)
   examKinds: ['naesin'],   // 준비하는 시험 종류 (시험 추가 칸 기본 선택지·추천 과목용)
   minLongShare: 20,        // 장기 시험 최소 비중 (%)
+  wakeSleep: null,         // 요일별 기상·취침 [{wake, sleep} × 7(일~토)] — null이면 매일 wake/sleep
+  stageRatios: {},         // 시험 종류별 단계 비율 바꾸기 { naesin: [45, 35, 20], … } — 없으면 presets 기본값
+  maxBlocksPerSubject: 0,  // 한 과목이 하루에 받을 수 있는 최대 블록 수 (0 = 제한 없음)
+  ramp: 'off',             // 단계 올리기: off | slow | normal | fast (presets.RAMP)
   plannerView: 'day',      // 플래너에서 마지막으로 본 보기: day | week (전문가 모드)
   mode: 'expert',          // 화면 모드: basic(간단하게 설정할래요) | expert(다 설정할래요) — 기존 사용자는 expert
   // 꾸미기 (화면 테마·글꼴)
@@ -87,6 +92,7 @@ function sanitizeSettings(input = {}) {
     lunch: range(input.lunch, d.lunch),
     dinner: range(input.dinner, d.dinner),
     bufferMin: num(input.bufferMin, d.bufferMin, 0, 120),
+    bufferAfterMin: num(input.bufferAfterMin, num(input.bufferMin, d.bufferMin, 0, 120), 0, 120),
     blockMin: num(input.blockMin, d.blockMin, 20, 120),
     breakMin: num(input.breakMin, d.breakMin, 0, 60),
     maxWeekdayMin: num(input.maxWeekdayMin, d.maxWeekdayMin, 0, 900),
@@ -98,12 +104,48 @@ function sanitizeSettings(input = {}) {
       return k.length ? k : [...d.examKinds];
     })(),
     minLongShare: num(input.minLongShare, d.minLongShare, 0, 50),
+    wakeSleep: Array.isArray(input.wakeSleep) && input.wakeSleep.length === 7
+      ? input.wakeSleep.map((v) => ({ wake: time(v?.wake, time(input.wake, d.wake)), sleep: time(v?.sleep, time(input.sleep, d.sleep)) }))
+      : null,
+    stageRatios: cleanStageRatios(input.stageRatios),
+    maxBlocksPerSubject: num(input.maxBlocksPerSubject, d.maxBlocksPerSubject, 0, 12),
+    ramp: P.RAMP_IDS.includes(input.ramp) ? input.ramp : d.ramp,
     plannerView: input.plannerView === 'week' ? 'week' : 'day',
     mode: input.mode === 'basic' ? 'basic' : 'expert',
     theme: THEME_IDS.includes(input.theme) ? input.theme : d.theme,
     handFont: FONT_IDS.includes(input.handFont) ? input.handFont : d.handFont,
     fontScale: [1, 1.1, 1.2].includes(Number(input.fontScale)) ? Number(input.fontScale) : d.fontScale,
   };
+}
+
+// 종류별 단계 비율: 정해진 단계가 있는 종류만, 단계 수만큼의 숫자(각 5% 이상)를 합 100으로 맞춤. 기본값과 같으면 저장 안 함
+function cleanStageRatios(input) {
+  const out = {};
+  if (!input || typeof input !== 'object') return out;
+  for (const [kind, arr] of Object.entries(input)) {
+    const st = P.EXAM_KINDS[kind]?.stages;
+    if (!st || !Array.isArray(arr) || arr.length !== st.length) continue;
+    const v = arr.map(Number);
+    if (v.some((x) => !Number.isFinite(x) || x < 5 || x > 90)) continue;
+    const sum = v.reduce((a, b) => a + b, 0);
+    const r = v.map((x) => Math.round((x / sum) * 100));
+    r[r.length - 1] += 100 - r.reduce((a, b) => a + b, 0);
+    if (r.some((x, i) => x !== st[i].ratio)) out[kind] = r;
+  }
+  return out;
+}
+// 그날의 기상·취침 (요일별 설정이 있으면 그 요일 값)
+const wakeSleepFor = (s, date) => (s.wakeSleep ? s.wakeSleep[dow(date)] : { wake: s.wake, sleep: s.sleep });
+
+// 단계 올리기: 그날의 하루 공부 상한 (base = 원래 하루 최대 공부량)
+//  - 시작일(rampStart)부터 지난 날 수로 계산, 시험이 RAMP_RELEASE_DAYS 안으로 다가온 날은 풀어서 base 그대로
+function rampCap(s, base, date, rampStart, upcomingDls = []) {
+  const R = P.RAMP[s.ramp];
+  if (!R || s.ramp === 'off' || !rampStart) return base;
+  if (upcomingDls.some((dl) => dl <= P.RAMP_RELEASE_DAYS)) return base;
+  const days = Math.max(0, diffDays(rampStart, date));
+  const start = R.startBlocks ? R.startBlocks * s.blockMin : Math.round(base * R.start);
+  return Math.min(base, start + s.blockMin * Math.floor(days / R.period));
 }
 
 // ── 그날의 고정 일정 (학교/시험/학원/식사) ──
@@ -127,13 +169,13 @@ function fixedBlocksFor(date, s, examsToday = []) {
 }
 
 // ── 빈 시간 구간 계산 ──
-function freeIntervals(s, busy) {
-  const wake = toMin(s.wake);
+function freeIntervals(s, busy, ws = { wake: s.wake, sleep: s.sleep }) {
+  const wake = toMin(ws.wake);
   const dayStart = wake + 30; // 기상 후 30분은 준비 시간
-  let dayEnd = toMin(s.sleep);
+  let dayEnd = toMin(ws.sleep);
   if (dayEnd <= wake) dayEnd = 24 * 60;
   const bs = busy
-    .map((b) => ({ start: b.start - (b.buffer ? s.bufferMin : 0), end: b.end + (b.buffer ? s.bufferMin : 0) }))
+    .map((b) => ({ start: b.start - (b.buffer ? s.bufferMin : 0), end: b.end + (b.buffer ? s.bufferAfterMin ?? s.bufferMin : 0) }))
     .sort((a, b) => a.start - b.start);
   const res = [];
   let cur = dayStart;
@@ -212,9 +254,14 @@ function stageCounts(N, stages) {
   return counts;
 }
 
+// 시험의 공부 단계 (설정에서 종류별 비율을 바꿨으면 그 비율로)
+function stagesOf(exam, ratios = {}) {
+  const st = P.stagesFor(exam), r = ratios[exam.kind || 'naesin'];
+  return r && r.length === st.length && P.EXAM_KINDS[exam.kind || 'naesin']?.stages ? st.map((x, i) => ({ ...x, ratio: r[i] })) : st;
+}
 // 진도 번호(idx, 0부터)에 맞는 할 일 제목
-function stageTitle(exam, idx, N) {
-  const stages = P.stagesFor(exam);
+function stageTitle(exam, idx, N, ratios) {
+  const stages = stagesOf(exam, ratios);
   const counts = stageCounts(N, stages);
   const units = splitUnits(exam.scope);
   let base = 0;
@@ -242,7 +289,7 @@ function stageTitle(exam, idx, N) {
  * @param doneCount { examId: 시작일 전까지 진행한 공부 블록 수 } — 진도 이어가기용
  * @returns { tasks: until까지의 할 일, all: 끝까지 계산한 할 일, simMin: {examId: 시작일 이후 예상 공부 분} }
  */
-function buildPlan({ settings: s, exams, keepTasks = [], startDate, until = null, doneCount = {} }) {
+function buildPlan({ settings: s, exams, keepTasks = [], startDate, until = null, doneCount = {}, rampStart = '' }) {
   if (!exams.length) return { tasks: [], all: [], simMin: {} };
   const sorted = [...exams].sort((a, b) => a.date.localeCompare(b.date));
   const lastDate = sorted[sorted.length - 1].date;
@@ -263,8 +310,10 @@ function buildPlan({ settings: s, exams, keepTasks = [], startDate, until = null
     const busy = [...fixed, ...kept.map((t) => ({ start: t.start, end: t.end }))];
     const isSchoolDay = !!(s.school[dow(date)] || {}).on || todays.length > 0;
     const keptMin = kept.reduce((a, t) => a + (t.end - t.start), 0);
-    const cap = Math.max(0, (isSchoolDay ? s.maxWeekdayMin : s.maxWeekendMin) - keptMin);
-    let slots = makeSlots(freeIntervals(s, busy), s, cap);
+    const base = isSchoolDay ? s.maxWeekdayMin : s.maxWeekendMin;
+    const dayCap = rampCap(s, base, date, rampStart, [...todays.map(() => 0), ...upcoming.map((e) => diffDays(date, e.date))]);
+    const cap = Math.max(0, dayCap - keptMin);
+    let slots = makeSlots(freeIntervals(s, busy, wakeSleepFor(s, date)), s, cap);
     if (!slots.length) continue;
 
     let reviewSlot = null;
@@ -285,8 +334,10 @@ function buildPlan({ settings: s, exams, keepTasks = [], startDate, until = null
       w *= (P.PRIORITY[e.priority] || P.PRIORITY.normal).weight;
       return w;
     });
-    const counts = allocateWithLongShare(slots.length, weights, dls, todays.length > 0, s.minLongShare ?? 0);
+    let counts = allocateWithLongShare(slots.length, weights, dls, todays.length > 0, s.minLongShare ?? 0);
+    if (s.maxBlocksPerSubject > 0) counts = capPerSubject(counts, weights, s.maxBlocksPerSubject);
     const order = interleave(counts);
+    slots = slots.slice(0, order.length); // 과목별 한도 때문에 못 채운 블록은 비워 둠
     slots.forEach((sl, i) => {
       const e = upcoming[order[i]];
       out.push({ date, start: sl.start, end: sl.end, exam_id: e.id, subject: e.subject, kind: 'study', title: '' });
@@ -310,10 +361,23 @@ function buildPlan({ settings: s, exams, keepTasks = [], startDate, until = null
         t.title = ['D-1 실전 모의 풀이 — 시간 재고 풀어보기', 'D-1 취약 단원 & 오답노트 최종 점검', 'D-1 핵심 암기 백지 테스트'][(c - 1) % 3];
         return;
       }
-      t.title = stageTitle(e, done + k, N);
+      t.title = stageTitle(e, done + k, N, s.stageRatios);
     });
   }
   return { tasks: until ? out.filter((t) => t.date <= until) : out, all: out, simMin };
+}
+
+// 과목별 하루 최대 블록: 넘친 만큼을 아직 여유 있는 과목에 가중치 순으로 넘기고, 모두 차면 남은 블록은 버림
+function capPerSubject(counts, weights, max) {
+  const c = counts.map((x) => Math.min(x, max));
+  let left = counts.reduce((a, b) => a + b, 0) - c.reduce((a, b) => a + b, 0);
+  const order = weights.map((w, i) => i).sort((a, b) => weights[b] - weights[a]);
+  while (left > 0) {
+    const room = order.filter((i) => c[i] < max);
+    if (!room.length) break;
+    for (const i of room) { if (!left) break; c[i]++; left--; }
+  }
+  return c;
 }
 
 // 장기 시험 최소 비중: 60일 이상 남은 시험 묶음에 하루 블록의 minShare%를 보장
@@ -341,6 +405,6 @@ const generatePlan = (args) => buildPlan(args).tasks;
 
 module.exports = {
   DEFAULT_SETTINGS, PALETTE, DAY_KO,
-  sanitizeSettings, fixedBlocksFor, generatePlan, buildPlan, stageCounts, stageTitle, allocateWithLongShare, splitUnits,
+  sanitizeSettings, fixedBlocksFor, generatePlan, buildPlan, rampCap, wakeSleepFor, capPerSubject, stagesOf, freeIntervals, stageCounts, stageTitle, allocateWithLongShare, splitUnits,
   toMin, toHM, addDays, diffDays, dow,
 };

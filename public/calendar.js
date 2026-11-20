@@ -223,6 +223,55 @@ function renderPresetPick() {
   $('#presetNote').textContent = '기상·취침 시간, 공부 블록 길이(50분), 시험 당일 시간은 기본값으로 넣어 둬요. 「다 설정할래요」로 바꾸면 직접 고칠 수 있어요.';
 }
 
+// ───────── 고급 탭 (전문가 모드) · 단계 올리기 ─────────
+// 단계 올리기 고르기 (고급 탭과 기본 모드 ⑤ 단계가 같은 값을 씀)
+function renderRamp(el, name) {
+  el.innerHTML = Presets.RAMP_IDS.map((id) => { const r = Presets.RAMP[id];
+    return `<label><input type="radio" name="${name}" value="${id}" ${settings.ramp === id ? 'checked' : ''}><span><b>${r.label}</b>${r.desc}</span></label>`; }).join('');
+}
+function fillAdvanced() {
+  const s = settings;
+  renderRamp($('#rampPick'), 'ramp'); renderRamp($('#rampPickBasic'), 'rampBasic');
+  $$('.advBlock').forEach((e) => (e.textContent = s.blockMin));
+  $('#bufferAfterMin').value = s.bufferAfterMin;
+  $('#maxBlocksPerSubject').value = s.maxBlocksPerSubject;
+  $('#wsOn').checked = !!s.wakeSleep;
+  const ws = s.wakeSleep || DAY_KO.map(() => ({ wake: s.wake, sleep: s.sleep }));
+  $('#wsTable tbody').innerHTML = ws.map((v, i) => `<tr>
+    <td style="color:${i === 0 ? 'var(--sun)' : i === 6 ? 'var(--sat)' : ''}">${DAY_KO[i]}요일</td>
+    <td><input class="input" type="time" data-ws="${i}" data-k="wake" value="${v.wake}"></td>
+    <td><input class="input" type="time" data-ws="${i}" data-k="sleep" value="${v.sleep}"></td></tr>`).join('');
+  $('#wsTable').hidden = !s.wakeSleep;
+  $('#ratioList').innerHTML = Presets.KIND_IDS.filter((k) => Presets.EXAM_KINDS[k].stages).map((k) => {
+    const st = Presets.EXAM_KINDS[k].stages, r = s.stageRatios[k] || st.map((x) => x.ratio);
+    return `<div class="ratio-row" data-kind="${k}"><b>${Presets.EXAM_KINDS[k].label}</b>${st.map((x, i) =>
+      `<label class="field">${esc(x.name)}<input class="input" type="number" min="5" max="90" step="5" data-r="${i}" value="${r[i]}"></label>`).join('')}</div>`;
+  }).join('');
+}
+function readAdvanced() {
+  const s = settings;
+  s.ramp = (Mode.basic ? $('#rampPickBasic input:checked') : $('#rampPick input:checked'))?.value || s.ramp;
+  s.bufferAfterMin = +$('#bufferAfterMin').value;
+  s.maxBlocksPerSubject = +$('#maxBlocksPerSubject').value;
+  s.wakeSleep = $('#wsOn').checked ? DAY_KO.map((_, i) => ({ wake: $(`[data-ws="${i}"][data-k=wake]`).value, sleep: $(`[data-ws="${i}"][data-k=sleep]`).value })) : null;
+  s.stageRatios = Object.fromEntries($$('#ratioList .ratio-row').map((row) => [row.dataset.kind, $$('[data-r]', row).map((i) => +i.value)]));
+}
+$('#wsOn').addEventListener('change', (e) => { $('#wsTable').hidden = !e.target.checked; });
+// 두 곳의 단계 올리기 선택을 맞춰 둠
+$('#setOv').addEventListener('change', (e) => {
+  if (e.target.name === 'ramp' || e.target.name === 'rampBasic') $$('[name=ramp], [name=rampBasic]').forEach((r) => (r.checked = r.value === e.target.value));
+});
+// 고급 탭만 기본값으로 (이동 시간은 지금 생활 유형의 기본값)
+$('#advReset').onclick = () => {
+  if (!confirm('고급 탭의 값을 처음 값으로 되돌릴까요? (다른 탭은 그대로예요)')) return;
+  readSettings();
+  const buf = Presets.LIFE_TYPES[settings.lifeType]?.defaults?.bufferMin ?? 30;
+  Object.assign(settings, { ramp: 'off', bufferMin: buf, bufferAfterMin: buf, breakMin: 10, maxBlocksPerSubject: 0, reviewSlot: true, wakeSleep: null, stageRatios: {} });
+  fillSettings();
+  dirty = true;
+  toast('고급 설정을 처음 값으로 되돌렸어요. 「저장하고 계획 만들기」를 누르면 반영돼요', 3200);
+};
+
 // ───────── 화면 모드 바꾸기 (설정 창 아래) — 데이터는 그대로, 보이는 것만 바뀜 ─────────
 $('#modePick').addEventListener('change', async (e) => {
   const mode = e.target.value;
@@ -277,6 +326,7 @@ function fillSettings() {
   $('#blockMin').value = s.blockMin; $('#breakMin').value = s.breakMin; $('#bufferMin').value = s.bufferMin;
   $('#maxWeekday').value = s.maxWeekdayMin / 60; $('#maxWeekend').value = s.maxWeekendMin / 60;
   $('#reviewSlot').checked = s.reviewSlot;
+  fillAdvanced();
   $('#minLongShare').value = s.minLongShare;
   renderLifePick();
   applyLifeLabels();
@@ -293,7 +343,8 @@ function applyLifeLabels() {
   $('#schoolOnTh').textContent = student ? '등교' : L;
   $('#examDayTitle').textContent = lt.examDayLabel;
   $('#lunchLabel').textContent = `점심 시작 (${L} 없는 날)`;
-  $('#bufferLabel').textContent = `${L}·학원 전후 이동 (분)`;
+  $('#bufferLabel').textContent = `${L}·학원 가기 전 (분)`;
+  $('#bufferAfterLabel').textContent = `${L}·학원 끝난 뒤 (분)`;
   $('#maxWeekdayLabel').textContent = student ? '학교 가는 날 최대 공부 (시간)' : `${L} 있는 날 최대 공부 (시간)`;
 }
 function renderLifePick() {
@@ -307,13 +358,13 @@ function renderLifePick() {
 function applyLifeHidden(s, id) {
   const d = Presets.LIFE_TYPES[id]?.defaults;
   if (!d) return s;
-  return { ...s, examDay: { ...d.examDay }, bufferMin: d.bufferMin, maxWeekdayMin: d.maxWeekdayMin, maxWeekendMin: d.maxWeekendMin };
+  return { ...s, examDay: { ...d.examDay }, bufferMin: d.bufferMin, bufferAfterMin: d.bufferMin, maxWeekdayMin: d.maxWeekdayMin, maxWeekendMin: d.maxWeekendMin };
 }
 // 생활 유형의 기본 시간표 넣기 (학교/강의/근무 요일·시간, 시험 당일, 이동 시간, 하루 최대 공부)
 function applyLifeDefaults(s, id) {
   const d = Presets.LIFE_TYPES[id]?.defaults;
   if (!d) return s;
-  return { ...s, school: d.school.map((x) => ({ ...x })), examDay: { ...d.examDay }, bufferMin: d.bufferMin, maxWeekdayMin: d.maxWeekdayMin, maxWeekendMin: d.maxWeekendMin };
+  return { ...s, school: d.school.map((x) => ({ ...x })), examDay: { ...d.examDay }, bufferMin: d.bufferMin, bufferAfterMin: d.bufferMin, maxWeekdayMin: d.maxWeekdayMin, maxWeekendMin: d.maxWeekendMin };
 }
 $('#lifePick').addEventListener('change', (e) => {
   const id = e.target.value;
@@ -396,6 +447,7 @@ function readSettings() {
   s.blockMin = +$('#blockMin').value; s.breakMin = +$('#breakMin').value; s.bufferMin = +$('#bufferMin').value;
   s.maxWeekdayMin = Math.round(+$('#maxWeekday').value * 60); s.maxWeekendMin = Math.round(+$('#maxWeekend').value * 60);
   s.reviewSlot = $('#reviewSlot').checked;
+  readAdvanced();
   s.minLongShare = +$('#minLongShare').value;
   s.lifeType = $('#lifePick input:checked')?.value || s.lifeType;
   s.examKinds = $$('#kindPick input:checked').map((c) => c.value);
@@ -694,7 +746,11 @@ function chooseMode() {
       const b = e.target.closest('button[data-mode]');
       if (!b) return;
       $$('#modeOv button').forEach((x) => (x.disabled = true));
-      try { const saved = await Mode.set(b.dataset.mode); if (saved) settings = saved; }
+      try {
+        const saved = await Mode.set(b.dataset.mode); if (saved) settings = saved;
+        // 처음 공부를 시작하는 기본 모드는 단계 올리기 '보통'을 골라 둠 (⑤ 단계에서 바꿀 수 있음)
+        if (b.dataset.mode === 'basic') settings = await api('/settings', { method: 'PUT', body: { ...settings, ramp: 'normal' } });
+      }
       catch (err) { toast(err.message); }
       $$('#modeOv button').forEach((x) => (x.disabled = false));
       $('#modeOv').classList.remove('open');

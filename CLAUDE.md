@@ -51,7 +51,7 @@ npm start                      # http://localhost:3000 , 로그에 "저장 위�
 PORT=3123 node server.js       # 다른 포트
 npm test                       # 단위 테스트 (node --test → test/*.test.js)
 ```
-- 테스트: Node 내장 `node:test` + `node:assert`만 사용합니다(추가 패키지 없음). `test/scheduler.test.js`(겹침·배정 비중·선호 요일·단계 순서·하루 한도), `test/scopeParser.test.js`(공지 형식·팁 제외·날짜/연도 추정·과목명 인식), `test/kinds.test.js`(종류별 단계·우선순위·장기 시험 최소 비중·28일/이어 생성 진도·성능), `test/api.test.js`(서버를 임시 DB·임의 포트로 띄워 API 흐름 확인), `test/migration.test.js`(서버를 다시 켜도 데이터 정리 마이그레이션이 한 번만 도는지), `test/basic.test.js`(모드·플래너 보기 저장/조회, 기본 모드 설정으로 계획 생성, `/api/week` 7일 응답, 토요일 미루기 → 다음 주 일요일), `test/snapshot.test.js`(설정을 안 건드린 계정의 계획 결과 해시 — 알고리즘·기본값을 일부러 바꿨을 때만 갱신). 기능을 바꾸면 관련 테스트도 함께 고칩니다.
+- 테스트: Node 내장 `node:test` + `node:assert`만 사용합니다(추가 패키지 없음). `test/scheduler.test.js`(겹침·배정 비중·선호 요일·단계 순서·하루 한도), `test/scopeParser.test.js`(공지 형식·팁 제외·날짜/연도 추정·과목명 인식), `test/kinds.test.js`(종류별 단계·우선순위·장기 시험 최소 비중·28일/이어 생성 진도·성능), `test/api.test.js`(서버를 임시 DB·임의 포트로 띄워 API 흐름 확인), `test/migration.test.js`(서버를 다시 켜도 데이터 정리 마이그레이션이 한 번만 도는지), `test/basic.test.js`(모드·플래너 보기 저장/조회, 기본 모드 설정으로 계획 생성, `/api/week` 7일 응답, 토요일 미루기 → 다음 주 일요일), `test/snapshot.test.js`(설정을 안 건드린 계정의 계획 결과 해시 — 알고리즘·기본값을 일부러 바꿨을 때만 갱신), `test/advanced.test.js`(고급 설정 범위 검사·계획 반영, 단계 올리기 상한 공식·7일 해제·시작일 저장, 완료/직접 추가 유지). 기능을 바꾸면 관련 테스트도 함께 고칩니다.
 - Turso 모드로 API 테스트: `db.js`의 `@libsql/client/web`을 잠시 `@libsql/client`로 바꾸고 `SIM_TURSO=file:/tmp/sim.db node --test test/api.test.js` (확인 후 되돌리기).
 - 화면은 자동 테스트가 없습니다. 지금까지는 `curl`로 API 흐름(회원가입 → 시험 추가 → /api/generate → /api/day → 체크 → /api/stats)을, Playwright로 화면(로그인, 새 창 열기, 설정, 마라톤 2인 입장)을 확인했습니다.
 - Turso 모드 확인: `@libsql/client/web` 대신 같은 API의 `@libsql/client`를 `TURSO_DATABASE_URL=file:/tmp/sim.db`로 붙여 두 모드 결과가 같은지 비교했습니다.
@@ -88,6 +88,9 @@ npm test                       # 단위 테스트 (node --test → test/*.test.j
     - 일주일 인쇄는 화면 밖 `#weekPrint`(폭 277mm)의 높이를 재서 `--pz` 배율을 정하고(`fitPrint`), 그때만 `@page`를 A4 가로로 바꿉니다(`setPageSize`). 하루 인쇄는 기존 A4 세로.
 19. **백색소음**(`noise.js`): 소리 파일 없이 6초 잡음 버퍼(화이트·핑크·브라운) + 필터 + 음량 자동화 + 짧은 "톡" 소리로 만듭니다. 무작위 소리는 2.5초 앞까지 미리 예약(`LOOKAHEAD`)해서 탭이 뒤로 가도 끊기지 않습니다. 소리를 바꾸거나 끌 때는 항상 크로스페이드(`fade`) — `src.stop()`을 바로 부르지 않습니다. 저장 키 `sp_noise` = `{type, vol, tone, rain}`, 예전 `white|pink|brown`은 `base` + tone 0/0.5/1로 읽습니다.
 
+20. **고급 설정**(전문가 모드 「🔧 고급」 탭, 기본 모드에서는 숨김): `bufferMin`(가기 전)·`bufferAfterMin`(끝난 뒤, 저장값 없으면 bufferMin), `breakMin`, `maxBlocksPerSubject`(0=제한 없음, `capPerSubject`), `reviewSlot`, `wakeSleep`(null 또는 요일 7개, `wakeSleepFor`), `stageRatios`(종류별 덮어쓰기, 기본값과 같으면 저장 안 함, `stagesOf`). **모든 기본값은 이전 동작과 같아야 합니다** — `test/snapshot.test.js`가 지켜 봅니다. 시험 직전 가중치(D-1 ×4, D-2 ×1.6)는 설정으로 열지 않았습니다(사용자 결정).
+21. **단계 올리기**(`settings.ramp` = off | slow | normal | fast, 단계 정의는 `presets.RAMP`): 하루 상한 = `min(최대, 시작값 + blockMin × floor(지난 날 ÷ 주기))`(`scheduler.rampCap`), 시험 `RAMP_RELEASE_DAYS`(7일) 안이면 해제. 시작일은 `users.ramp_start` — `/api/generate`가 켜져 있고 비어 있으면 오늘로 채우고(같은 batch), `PUT /api/settings`에서 off면 지웁니다. 완료·직접 추가 일정 시간은 상한에서 뺍니다(기존 keptMin 규칙). 가입 직후 기본 모드를 고르면 「보통」을 미리 고릅니다. 기존 계정·전문가 신규 가입은 off.
+
 ## 환경 변수
 `PORT`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `DB_PATH`, `JWT_SECRET`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`(기본 claude-sonnet-5-5), `AI_DAILY_LIMIT`(기본 20).
 `.env` 파일(=`.env.example` 복사)을 서버가 자동으로 읽습니다. **비밀 값은 절대 커밋하지 않습니다.** (`.gitignore`에 `.env`, `data/`, `node_modules/` 포함)
@@ -106,6 +109,7 @@ npm test                       # 단위 테스트 (node --test → test/*.test.j
 - [x] 시험 조합 지원: 생활 유형·시험 종류·우선순위·장기 시험 최소 비중·28일 생성 (2026-11-14)
 - [x] 기본 모드("간단하게 설정할래요"): 단계형 설정·주간 플래너·숨김 처리 (2026-11-17)
 - [x] 플래너 [하루 | 일주일] 보기 두 모드 공용, 주 시작 일요일, 백색소음 6종·미리듣기 (2026-11-20)
-- [ ] 사용자 선택 대기: 전문가 모드 "고급" 탭 후보 8개 중 구현할 항목 (이동 시간 전/후, 쉬는 시간, D-1·D-2 배율, 단계 비율, 마지막 복습 블록, 요일별 기상·취침, 과목별 하루 최대 블록, RAMP — RAMP는 현재 코드에 없음)
+- [x] 고급 탭 6개 항목 + 단계 올리기(천천히·보통·빠르게, 두 모드) + 「하루 계획 보기」 문구 (2026-11-20)
+- [ ] 사용자 피드백 대기: 단계 올리기 시험 7일 전 해제, 기본 모드 신규 가입 「보통」 기본 선택
 - [ ] 사용자 피드백 대기: 생활 유형 기본 시간표(대학생 10~15시 5h/8h, 직장인 9~18시 이동 60분 2h/5h 등), 장기 시험 기준 60일·최소 20%
 - [ ] 사용자 피드백 대기 중인 기준값: 잠자기 전환 20분, 불꽃 1·2·4시간, 방 최대 10명, 폴링 5초
