@@ -86,9 +86,6 @@
     .timer .tbar i { display: block; height: 100%; background: var(--accent); width: 0; transition: width 1s linear; }
     .timer select { margin-bottom: 10px; }
     .noise-box { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); text-align: left; }
-    .noise-row { display: flex; gap: 6px; align-items: center; }
-    .noise-row select { margin: 0; flex: 1; font-size: 13px; }
-    #noiseVol { width: 100%; accent-color: var(--accent); margin: 8px 0 4px; }
 
     /* 회고 */
     .moods { display: flex; gap: 4px; justify-content: space-between; margin-bottom: 8px; }
@@ -112,8 +109,11 @@
     @media print {
       @page { size: A4; margin: 12mm; }
       html, body { background: #fff !important; zoom: 1; }
-      body > :not(#printSheet) { display: none !important; }
-      #printSheet { display: block; color: #222; font-size: 10.5pt; line-height: 1.45; }
+      html, body { min-height: 0 !important; height: auto; }
+      body > * { display: none !important; }
+      body.view-day > #printSheet { display: block !important; color: #222; font-size: 10.5pt; line-height: 1.45; }
+      /* 일주일 보기: A4 가로 한 장 (planner.js가 @page 방향과 --pz 배율을 정함) */
+      body.view-week > #weekPrint { display: block !important; position: static; visibility: visible; zoom: var(--pz, 1); }
       .ps-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; border-bottom: 2px solid #222; padding-bottom: 6px; margin-bottom: 8px; }
       .ps-date { font-family: var(--font-hand), 'Nanum Pen Script', cursive; font-size: calc(32pt * var(--hand-scale)); line-height: 1; }
       .ps-dd { font-size: 9.5pt; text-align: right; }
@@ -134,6 +134,97 @@
       .ps-memo b { font-size: 9pt; }
       .ps-lines { min-height: 84px; white-space: pre-wrap; background-image: linear-gradient(transparent 27px, #ddd 27px); background-size: 100% 28px; line-height: 28px; }
     }
+
+    /* ── 보기 전환: 하루 | 일주일 ── */
+    .viewtabs { display: inline-flex; border: 1.5px solid var(--ink); border-radius: 999px; overflow: hidden; box-shadow: 2px 2px 0 var(--ink); }
+    .viewtabs button { border: none; background: var(--paper); padding: 4px 14px; font-size: 13px; cursor: pointer; }
+    .viewtabs button + button { border-left: 1.5px solid var(--ink); }
+    .viewtabs button.on { background: var(--butter); }
+    .view-day #weekView, .view-week .cols, .view-week #quote, .view-week #jump { display: none; }
+    .view-week .wrap { max-width: 1480px; }
+
+    /* ── 일주일 보기 ── */
+    #weekTimerSlot .timer-card { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; text-align: left; padding: 10px 14px; }
+    #weekTimerSlot .timer-card h3 { margin: 0; }
+    #weekTimerSlot .timer-card .modes { margin: 0; order: 2; }
+    #weekTimerSlot .timer-card select#timerTask { order: 1; flex: 1 1 220px; max-width: 360px; width: auto; margin: 0; font-size: 13px; }
+    #weekTimerSlot .timer-card .t { order: 3; font-size: calc(40px * var(--hand-scale)); margin: 0; min-width: 92px; text-align: center; }
+    #weekTimerSlot .timer-card #tStart { order: 4; } #weekTimerSlot .timer-card #tReset { order: 5; }
+    #weekTimerSlot .timer-card .tbar { order: 6; flex: 1 1 100%; margin: 0; height: 5px; }
+    #weekTimerSlot .timer-card .noise-box { order: 7; flex: 1 1 100%; margin-top: 2px; padding-top: 8px; }
+    #weekTimerSlot .nz { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; }
+    #weekTimerSlot .nz-list { flex: 1 1 520px; margin: 0; }
+    #weekTimerSlot .nz-sl { flex: 0 1 230px; }
+    #weekTimerSlot .nz-hint { flex: 1 1 100%; }
+    .wk-scroll { overflow-x: auto; }
+    .wk { display: grid; grid-template-columns: repeat(7, minmax(158px, 1fr)); border-top: 1.5px solid var(--ink); border-left: 1px solid var(--line); min-width: 1106px; }
+    .wd { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 8px 8px 10px; min-height: 300px; display: flex; flex-direction: column; min-width: 0; }
+    .wd.past { background-color: color-mix(in srgb, var(--soft) 50%, transparent); }
+    .wd.today { background-color: var(--note); box-shadow: inset 0 3px 0 var(--accent); }
+    .wd-head { display: flex; align-items: center; gap: 6px; padding-bottom: 6px; border-bottom: 1.5px solid var(--ink); margin-bottom: 6px; text-decoration: none; }
+    a.wd-head:hover { background: var(--hover); }
+    .wd-head .dn { font-size: 13px; color: var(--muted); }
+    .wd-head .num { font-size: 16px; width: 28px; height: 28px; line-height: 28px; text-align: center; border-radius: 50%; }
+    .wd.today .num { background: var(--accent); color: var(--on-accent); }
+    .wd.sun .dn, .wd.sun .num { color: var(--sun); } .wd.sat .dn, .wd.sat .num { color: var(--sat); }
+    .wd.today.sun .num, .wd.today.sat .num { color: var(--on-accent); }
+    .wd-head .todaytag { font-size: 11px; color: var(--accent); }
+    .wd-head .go { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+    a.wd-head:hover .go { color: var(--accent); }
+    .wd .sticker { font-size: 12px; padding: 2px 7px; border-radius: 4px; background: var(--c); color: #fff; align-self: flex-start; transform: rotate(-2deg);
+      box-shadow: 1px 1px 0 rgba(0,0,0,.12); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 4px; }
+    .wd .sticker::before { content: '★ '; }
+    .fx { font-size: 11px; color: var(--muted); line-height: 1.4; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .wtodos { list-style: none; padding: 0; margin: 0; flex: 1; }
+    .wt { display: flex; gap: 7px; align-items: flex-start; padding: 7px 0; border-bottom: 1px solid var(--rule); }
+    .wt.focus { background: var(--hover); box-shadow: -3px 0 0 var(--accent); }
+    .wt .check { margin-top: 1px; }
+    .wt .check .box { width: 20px; height: 20px; }
+    .wt .check input:checked + .box::after { left: 4px; top: -3px; font-size: 17px; }
+    .wbody { flex: 1; min-width: 0; }
+    .wmeta { font-size: 11px; color: var(--muted); display: flex; gap: 5px; align-items: center; flex-wrap: wrap; margin-bottom: 2px; }
+    .wmeta .chip { font-size: 11px; padding: 0 6px; }
+    .wtitle { font-size: 13px; line-height: 1.35; word-break: keep-all; overflow-wrap: anywhere; }
+    .wt.done .wtitle { text-decoration: line-through; text-decoration-color: var(--accent); color: var(--muted); }
+    .wact { display: flex; flex-direction: column; opacity: .3; transition: .15s; }
+    .wt:hover .wact, .wt:focus-within .wact { opacity: 1; }
+    .wact button { background: none; border: none; cursor: pointer; font-size: 12px; padding: 2px 4px; color: var(--muted); border-radius: 6px; }
+    .wact button:hover { background: var(--soft); color: var(--ink); }
+    .wempty { font-size: 12px; color: var(--muted); padding: 14px 0; text-align: center; }
+    .wcount { font-size: 11px; color: var(--muted); margin-top: 6px; display: flex; align-items: center; gap: 6px; }
+    .wcount .bar, .ws-row .bar { flex: 1; height: 5px; background: var(--track); border-radius: 99px; overflow: hidden; }
+    .wcount .bar i, .ws-row .bar i { display: block; height: 100%; background: var(--c, var(--sage)); border-radius: 99px; }
+    /* 과목별 이번 주 계획·완료 시간 (전문가 모드) */
+    #weekStats { margin-top: 22px; }
+    .ws-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px 26px; }
+    .ws-row { font-size: 13px; }
+    .ws-row .top { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 3px; }
+    .ws-row .bar { height: 8px; }
+    @media (max-width: 760px) {
+      .wk { grid-template-columns: 1fr; min-width: 0; } .wd { min-height: 0; }
+      .wact { flex-direction: row; opacity: 1; }
+    }
+    /* 일주일 인쇄 시트 (화면에서는 높이 계산용으로만 쓰임) */
+    #weekPrint { position: absolute; left: -99999px; top: 0; visibility: hidden; width: calc(277mm / var(--pz, 1)); color: #222; font-size: 8.5pt; line-height: 1.35; }
+    #printRuler { position: absolute; left: -99999px; top: 0; visibility: hidden; height: 186mm; width: 1mm; }
+    .pw-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; border-bottom: 2px solid #222; padding-bottom: 4px; margin-bottom: 6px; }
+    .pw-date { font-family: var(--font-hand), 'Nanum Pen Script', cursive; font-size: calc(24pt * var(--hand-scale)); line-height: 1; }
+    .pw-dd { font-size: 8.5pt; text-align: right; }
+    .pw-dd b { margin-left: 8px; font-weight: normal; }
+    .pw-grid { display: grid; grid-template-columns: repeat(7, 1fr); border-left: 1px solid #bbb; border-top: 1px solid #bbb; }
+    .pw-day { border-right: 1px solid #bbb; border-bottom: 1px solid #bbb; padding: 4px 5px 6px; min-width: 0; }
+    .pw-dh { font-weight: bold; border-bottom: 1.2px solid #222; padding-bottom: 2px; margin-bottom: 3px; display: flex; justify-content: space-between; gap: 4px; }
+    .pw-dh span { font-weight: normal; font-size: 7.5pt; }
+    .pw-fx { font-size: 7pt; color: #555; margin-bottom: 3px; }
+    .pw-t { display: flex; gap: 4px; padding: 2.5px 0; border-bottom: 1px solid #ddd; break-inside: avoid; }
+    .pw-box { flex: none; width: 9pt; height: 9pt; border: 1.2px solid #222; border-radius: 2px; margin-top: 1px; position: relative; }
+    .pw-box.on::after { content: '✓'; position: absolute; left: 0; top: -4px; font-size: 9pt; font-weight: bold; }
+    .pw-m { font-size: 7pt; color: #555; }
+    .pw-m b { color: #222; border-left: 3px solid var(--c, #999); padding-left: 3px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .pw-t.done .pw-title { text-decoration: line-through; color: #888; }
+    .pw-none { color: #999; font-size: 7.5pt; padding: 6px 0; }
+    .pw-sum { margin-top: 5px; font-size: 7.5pt; color: #444; }
+    .pw-sum b { margin-right: 10px; font-weight: normal; }
   </style>
 </head>
 <body>
@@ -143,15 +234,18 @@
       <a class="btn small" id="todayBtn">오늘</a>
       <a class="btn small" id="nextDay">내일 ›</a>
       <input type="date" class="btn small" id="jump" style="padding:3px 10px" aria-label="날짜 이동" />
+      <span class="viewtabs" id="viewTabs" data-expert role="tablist" aria-label="보기">
+        <button type="button" role="tab" data-view="day">하루</button><button type="button" role="tab" data-view="week">일주일</button>
+      </span>
       <span class="sp"></span>
       <div style="position:relative">
         <a class="btn small ghost" href="race.html" target="_blank" rel="opener">🏃 마라톤</a>
         <button class="btn small ghost" id="lookBtn" aria-expanded="false">🎨 테마</button>
         <div class="look-pop" id="lookPop" hidden></div>
       </div>
-      <a class="btn small ghost" id="weekLink" data-basic>🗓 주간 플래너로</a>
+      <a class="btn small ghost" id="weekLink" data-basic>🗓 일주일 보기</a>
       <a class="btn small ghost" href="index.html" id="calLink">📅 달력으로</a>
-      <button class="btn small ghost" onclick="window.print()" title="할 일 목록만 한 장으로 인쇄">🖨 인쇄</button>
+      <button class="btn small ghost" onclick="window.print()" id="printBtn" title="할 일 목록만 한 장으로 인쇄">🖨 인쇄</button>
       <button class="btn small ghost" id="plHelp" title="사용법">❓</button>
     </nav>
 
@@ -218,21 +312,7 @@
             <div class="tbar"><i id="tBar"></i></div>
             <button class="btn primary small" id="tStart">▶ 시작</button>
             <button class="btn small" id="tReset">↺ 초기화</button>
-            <div class="noise-box">
-              <div class="noise-row">
-                <span>🎧</span>
-                <select class="input" id="noiseType" aria-label="백색소음 종류">
-                  <option value="off">백색소음 끄기</option>
-                  <option value="white">화이트 (쏴아)</option>
-                  <option value="pink">핑크 (부드럽게)</option>
-                  <option value="brown">브라운 (낮고 묵직)</option>
-                  <option value="rain">빗소리</option>
-                </select>
-                <button class="btn small ghost" id="noiseTest" type="button">▶ 들어보기</button>
-              </div>
-              <input type="range" id="noiseVol" min="0" max="1" step="0.05" aria-label="음량" />
-              <div class="muted" style="font-size:11px">골라 두면 타이머를 시작할 때 자동으로 켜지고, 멈추면 꺼져요</div>
-            </div>
+            <div class="noise-box" id="noiseBox"></div>
           </div>
 
           <div class="card" data-expert>
@@ -246,11 +326,20 @@
           </div>
         </aside>
       </div>
+
+      <!-- 일주일 보기: 일~토 7일 (기본 모드는 이 보기만 씀) -->
+      <div id="weekView">
+        <div id="weekTimerSlot"></div>
+        <div class="wk-scroll"><div class="wk" id="wk"></div></div>
+        <section id="weekStats" data-expert></section>
+      </div>
     </article>
   </div>
 
   <!-- 인쇄 전용: 화면에는 안 보이고, 인쇄할 때만 이 시트 한 장이 출력됨 -->
   <section id="printSheet" aria-hidden="true"></section>
+  <section id="weekPrint" aria-hidden="true"></section>
+  <div id="printRuler" aria-hidden="true"></div>
 
   <script src="noise.js"></script>
   <script src="planner.js"></script>

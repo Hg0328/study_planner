@@ -42,6 +42,7 @@ const DEFAULT_SETTINGS = {
   lifeType: 'student',     // 생활 유형 (presets.LIFE_TYPES)
   examKinds: ['naesin'],   // 준비하는 시험 종류 (시험 추가 칸 기본 선택지·추천 과목용)
   minLongShare: 20,        // 장기 시험 최소 비중 (%)
+  plannerView: 'day',      // 플래너에서 마지막으로 본 보기: day | week (전문가 모드)
   mode: 'expert',          // 화면 모드: basic(간단하게 설정할래요) | expert(다 설정할래요) — 기존 사용자는 expert
   // 꾸미기 (화면 테마·글꼴)
   theme: 'cream',
@@ -97,6 +98,7 @@ function sanitizeSettings(input = {}) {
       return k.length ? k : [...d.examKinds];
     })(),
     minLongShare: num(input.minLongShare, d.minLongShare, 0, 50),
+    plannerView: input.plannerView === 'week' ? 'week' : 'day',
     mode: input.mode === 'basic' ? 'basic' : 'expert',
     theme: THEME_IDS.includes(input.theme) ? input.theme : d.theme,
     handFont: FONT_IDS.includes(input.handFont) ? input.handFont : d.handFont,

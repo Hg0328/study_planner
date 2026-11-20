@@ -382,7 +382,7 @@ async function dayPayloads(uid, dates) {
     memos[m.date] = { text: m.text, mood: m.mood, focus_min: m.focus_min };
   }
   const planUntil = (await db.get('SELECT plan_until FROM users WHERE id=?', [uid]))?.plan_until || '';
-  const view = { wake: settings.wake, sleep: settings.sleep, blockMin: settings.blockMin, mode: settings.mode };
+  const view = { wake: settings.wake, sleep: settings.sleep, blockMin: settings.blockMin, mode: settings.mode, plannerView: settings.plannerView };
   return dates.map((date) => ({
     date, settings: view,
     fixed: S.fixedBlocksFor(date, settings, exams.filter((e) => e.date === date)),

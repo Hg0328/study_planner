@@ -26,7 +26,7 @@ Auth.checkVisit();
 
 // 로그인 화면으로 이동 (플래너에서 왔다면 로그인 후 그 날짜로 돌아오도록 next 전달)
 // 로그인 후 돌아갈 수 있는 주소 (그 외 주소로는 이동하지 않음)
-const SAFE_NEXT = /^((planner\.html\?date|week\.html\?start)=\d{4}-\d{2}-\d{2}|race\.html(\?room=[A-Za-z0-9]{6})?)$/;
+const SAFE_NEXT = /^(planner\.html\?date=\d{4}-\d{2}-\d{2}(&view=(day|week))?|race\.html(\?room=[A-Za-z0-9]{6})?)$/;
 function goLogin() {
   const here = location.pathname.split('/').pop() + location.search;
   const ok = SAFE_NEXT.test(here);
@@ -40,7 +40,7 @@ async function api(path, { method = 'GET', body } = {}) {
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && !path.startsWith('/auth')) {
     Auth.clear();
-    if (/planner|week/.test(location.pathname)) goLogin();
+    if (location.pathname.includes('planner')) goLogin();
     else location.reload();
     throw new Error(data.error || '로그인이 필요해요');
   }
@@ -58,7 +58,7 @@ const D = {
   diff(a, b) { return Math.round((D.parse(b) - D.parse(a)) / 864e5); },
   dow(s) { return D.parse(s).getDay(); },
   pretty(s) { const d = D.parse(s); return `${d.getMonth() + 1}월 ${d.getDate()}일 (${DAY_KO[d.getDay()]})`; },
-  weekStart(s) { return D.add(s, -((D.dow(s) + 6) % 7)); }, // 그 날짜가 들어 있는 주의 월요일 (주간 플래너)
+  weekStart(s) { return D.add(s, -D.dow(s)); }, // 그 날짜가 들어 있는 주의 일요일 (일주일 보기는 일~토, 달력과 같음)
 };
 const toHM = (m) => `${D.pad(Math.floor(m / 60))}:${D.pad(m % 60)}`;
 const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };

@@ -31,8 +31,9 @@ $('#authForm').onsubmit = async (e) => {
 };
 $('#btnLogout').onclick = () => { Auth.clear(); location.reload(); };
 
-// 날짜를 눌렀을 때 열 주소 (새 창)
-const dayHref = (ds) => (Mode.basic ? `week.html?start=${D.weekStart(ds)}` : `planner.html?date=${ds}`);
+// 날짜를 눌렀을 때 열 주소 (새 창) — 진입점은 하나: 플래너가 모드에 맞는 보기로 열림
+//  (기본 모드 = 그 날짜가 들어 있는 주의 일주일 보기 / 전문가 모드 = 마지막으로 본 보기)
+const dayHref = (ds) => `planner.html?date=${ds}`;
 function setTodayLink() {
   $('#todayLink').href = dayHref(D.today());
   $('#todayLink').textContent = Mode.basic ? '📖 이번 주 플래너 열기' : '📖 오늘 플래너 열기';
@@ -70,8 +71,7 @@ async function renderCalendar() {
         <small>${info.done}/${info.total} 완료</small></div>
         ${pct === 100 ? '<span class="stamp">참잘</span>' : ''}`;
     }
-    // 기본 모드: 그 날짜가 들어 있는 주의 주간 플래너 / 전문가 모드: 그날의 하루 플래너
-    html += `<a class="${cls}" href="${dayHref(ds)}" target="_blank" rel="opener" title="${D.pretty(ds)} ${Mode.basic ? '주간 플래너' : '플래너'} 열기">
+    html += `<a class="${cls}" href="${dayHref(ds)}" target="_blank" rel="opener" title="${D.pretty(ds)} 플래너 열기">
       <span class="num">${d.getDate()}</span>${info?.mood ? `<span class="mood" data-expert>${info.mood}</span>` : ''}
       ${stickers}${bottom}</a>`;
   }
@@ -757,7 +757,7 @@ function startTour(isNew = false) {
     // 기본 모드: 짧은 안내 3단계
     return runTour([
       { el: '#btnSettings', title: '① 시험·시간표 넣기', text: `여기서 <b>시험</b>과 <b>${fixedName()}·학원·식사 시간</b>을 차례대로 넣으면 <b>공부 계획이 자동으로</b> 만들어져요. 언제든 다시 고칠 수 있어요.` },
-      { el: '#cal', title: '② 날짜를 누르면 주간 플래너', text: '날짜를 누르면 <b>그 주의 할 일</b>이 새 창으로 열려요. 끝낸 일을 체크하면 이 달력에도 바로 표시돼요.' },
+      { el: '#cal', title: '② 날짜를 누르면 주간 플래너', text: '날짜를 누르면 <b>그 주(일~토)의 할 일</b>이 새 창으로 열려요. 끝낸 일을 체크하면 이 달력에도 바로 표시돼요.' },
       { el: '#bigDday', title: '③ 시험까지 남은 날', text: '가장 가까운 시험까지 며칠 남았는지 여기서 볼 수 있어요. 사용법은 <b>❓ 사용법 보기</b>로 다시 볼 수 있어요.' },
     ], { doneLabel: exams.length ? '시작하기' : '시험 넣으러 가기 →', onDone: () => { if (!exams.length) openSettings(); } });
   }

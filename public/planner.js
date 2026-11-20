@@ -1,11 +1,20 @@
-// 하루 플래너: 타임테이블, 체크리스트, 타이머, 회고
+// 플래너: [하루 | 일주일] 두 가지 보기
+//  - 하루: 타임테이블, 체크리스트, 타이머, 회고
+//  - 일주일: 일~토 7일 체크리스트, 내일로 미루기, 과목별 이번 주 시간, A4 가로 인쇄
+//  - 주소: planner.html?date=YYYY-MM-DD&view=day|week (view가 없으면 기본 모드 = 일주일, 전문가 모드 = 마지막으로 본 보기)
+//  - 데이터는 두 보기 모두 GET /api/week 한 번으로 읽음 (하루 보기는 그중 하루치를 씀)
 const $ = (s) => document.querySelector(s);
 if (!Auth.token) goLogin();
 
-let date = new URLSearchParams(location.search).get('date');
+const params = new URLSearchParams(location.search);
+let date = params.get('date');
 if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) date = D.today();
-let data = null;
+let askedView = ['day', 'week'].includes(params.get('view')) ? params.get('view') : ''; // 주소로 지정한 보기
+let view = askedView || 'day';
+let wk = null;      // { from, to, days: [/api/day와 같은 형태 × 7] }
+let data = null;    // 지금 날짜의 하루치 (wk.days 중 하나)
 let hideDone = false;
+let focusId = 0;    // 일주일 보기에서 타이머로 집중 중인 할 일
 
 const QUOTES = [
   '오늘 걸은 한 걸음이 시험장에서의 자신감이 된다.',
@@ -23,27 +32,61 @@ function taskName(t, fallback) {
   return e ? examName(e, data.exams) : t.subject || fallback;
 }
 
+const allTasks = () => wk.days.flatMap((d) => d.tasks);
+const findTask = (id) => allTasks().find((t) => t.id === id);
+const taskColor = (t) => t.color || (t.kind === 'review' ? '#b48ead' : '#9a8c98');
+const href = (d, v = view) => `planner.html?date=${d}&view=${v}`;
+
 async function load() {
-  data = await api('/day/' + date);
+  wk = await api('/week?from=' + D.weekStart(date));
+  data = wk.days.find((d) => d.date === date);
   Mode.fromSettings(data.settings); // 기본 모드면 달성률·회고·직접 추가·다시 짜기를 숨김 (data-expert)
+  // 보기 정하기: 주소에 있으면 그대로 / 기본 모드는 일주일 / 전문가 모드는 마지막으로 본 보기(서버 설정)
+  view = askedView || (Mode.basic ? 'week' : data.settings.plannerView === 'week' ? 'week' : 'day');
   render();
+  // 주소로 보기를 정해서 연 경우(탭·날짜 누르기·이전/다음)도 "마지막으로 본 보기"로 저장 (전문가 모드)
+  if (!Mode.basic && askedView && data.settings.plannerView !== view) saveView(view);
+}
+async function saveView(v) {
+  try { const s = await api('/settings'); if (s.plannerView !== v) await api('/settings', { method: 'PUT', body: { ...s, plannerView: v } }); } catch {}
 }
 
+// 보기 탭 (전문가 모드): 화면만 바꾸고(다시 읽지 않음) 마지막으로 본 보기를 서버 설정에 저장 — 테마와 같은 방식
+async function setView(v) {
+  if (v === view) return;
+  view = askedView = v;
+  history.replaceState(null, '', href(date));
+  render();
+  saveView(v);
+}
+$('#viewTabs').addEventListener('click', (e) => { const b = e.target.closest('button[data-view]'); if (b) setView(b.dataset.view); });
+
 function render() {
-  const today = D.today();
+  const today = D.today(), week = view === 'week';
+  document.body.classList.toggle('view-week', week);
+  document.body.classList.toggle('view-day', !week);
+  document.querySelectorAll('#viewTabs button').forEach((b) => { b.classList.toggle('on', b.dataset.view === view); b.setAttribute('aria-selected', b.dataset.view === view); });
+  // 타이머 카드는 하나만 두고, 보기에 따라 자리만 옮김
+  const card = $('.timer-card'), slot = week ? $('#weekTimerSlot') : $('.cols > .side');
+  if (card.parentNode !== slot) { if (week) slot.appendChild(card); else slot.insertBefore(card, slot.children[1] || null); }
+  $('#printBtn').title = week ? '이번 주 할 일을 A4 가로 한 장으로 인쇄' : '할 일 목록만 한 장으로 인쇄';
+  setPageSize(week);
+  $('#weekLink').href = href(date, 'week');
+  $('#weekLink').hidden = week;
+  $('#ddays').innerHTML = data.exams
+    .filter((e) => e.date >= (week ? today : date))
+    .map((e) => `<span class="chip" style="--c:${e.color}">${esc(examName(e, data.exams))} ${dday(D.diff(week ? today : date, e.date))}</span>`)
+    .join('') || '<span class="muted" style="font-size:13px">남은 시험이 없어요 🎉</span>';
+  if (week) return renderWeek();
+
   document.title = `${D.pretty(date)} 플래너`;
   $('#dateTitle').innerHTML = `${D.pretty(date)}<small>${date.slice(0, 4)}</small>`;
-  $('#prevDay').href = `planner.html?date=${D.add(date, -1)}`;
-  $('#nextDay').href = `planner.html?date=${D.add(date, 1)}`;
-  $('#todayBtn').href = `planner.html?date=${today}`;
+  $('#prevDay').textContent = '‹ 어제'; $('#todayBtn').textContent = '오늘'; $('#nextDay').textContent = '내일 ›';
+  $('#prevDay').href = href(D.add(date, -1));
+  $('#nextDay').href = href(D.add(date, 1));
+  $('#todayBtn').href = href(today);
   $('#jump').value = date;
-  $('#weekLink').href = `week.html?start=${D.weekStart(date)}`;
   $('#quote').textContent = '“ ' + QUOTES[D.parse(date).getDate() % QUOTES.length] + ' ”';
-
-  $('#ddays').innerHTML = data.exams
-    .filter((e) => e.date >= date)
-    .map((e) => `<span class="chip" style="--c:${e.color}">${esc(examName(e, data.exams))} ${dday(D.diff(date, e.date))}</span>`)
-    .join('') || '<span class="muted" style="font-size:13px">남은 시험이 없어요 🎉</span>';
 
   renderTimeline();
   renderTodos();
@@ -186,11 +229,12 @@ $('#todos').addEventListener('focusout', async (e) => {
 });
 
 async function toggle(id) {
-  const t = data.tasks.find((x) => x.id === id);
+  const t = findTask(id);
   if (!t) return;
   t.done = t.done ? 0 : 1;
   render();
-  if (t.done && data.tasks.every((x) => x.done)) toast('🎉 오늘 할 일을 전부 끝냈어요! 참 잘했어요', 3000);
+  const day = wk.days.find((d) => d.date === t.date);
+  if (t.done && day.tasks.every((x) => x.done)) toast(view === 'week' ? `🎉 ${DAY_KO[D.dow(t.date)]}요일 할 일을 전부 끝냈어요!` : '🎉 오늘 할 일을 전부 끝냈어요! 참 잘했어요', 3000);
   try { await api('/tasks/' + id, { method: 'PATCH', body: { done: !!t.done } }); notifyChange(); }
   catch (e) { t.done = t.done ? 0 : 1; render(); toast(e.message); }
 }
@@ -260,10 +304,26 @@ $('#moods').addEventListener('click', (e) => {
 const timer = { total: 25 * 60, left: 25 * 60, run: false, iv: null, isBreak: false };
 function renderTimerTasks() {
   const sel = $('#timerTask'), cur = sel.value;
+  if (view === 'week') { // 일주일 보기: 이번 주의 안 끝낸 할 일 (오늘 것부터)
+    const today = D.today(), undone = allTasks().filter((t) => !t.done);
+    const opt = (t) => `<option value="${t.id}">${DAY_KO[D.dow(t.date)]} · ${esc(taskName(t, ''))} · ${esc(t.title)}</option>`;
+    sel.innerHTML = '<option value="">집중할 할 일 고르기</option>' + undone.filter((t) => t.date === today).map(opt).join('') + undone.filter((t) => t.date !== today).map(opt).join('');
+    if (!undone.some((t) => t.id === focusId)) focusId = 0;
+    sel.value = focusId || '';
+    return;
+  }
   sel.innerHTML = '<option value="">집중할 할 일 선택 (선택)</option>' +
     data.tasks.filter((t) => !t.done).map((t) => `<option value="${t.id}">${esc(taskName(t, ''))} · ${esc(t.title)}</option>`).join('');
   sel.value = cur;
 }
+// 집중 시간을 기록할 날짜: 하루 보기는 그 날짜(기존 동작), 일주일 보기는 오늘
+const focusDate = () => (view === 'week' ? D.today() : date);
+function setFocusTask(id) {
+  focusId = id || 0;
+  document.querySelectorAll('.wt').forEach((li) => li.classList.toggle('focus', +li.dataset.id === focusId));
+  $('#timerTask').value = focusId || '';
+}
+$('#timerTask').addEventListener('change', (e) => { if (view === 'week') setFocusTask(+e.target.value); });
 function drawTimer() {
   $('#tDisplay').textContent = `${D.pad(Math.floor(timer.left / 60))}:${D.pad(timer.left % 60)}`;
   $('#tBar').style.width = ((timer.total - timer.left) / timer.total) * 100 + '%';
@@ -279,8 +339,9 @@ async function creditElapsed() {
   if (m < 1) return;
   timer.credited = (timer.credited || 0) + m;
   try {
-    const r = await api('/focus/' + date, { method: 'POST', body: { minutes: m } });
-    data.memo.focus_min = r.focus_min; renderProgress(); notifyChange();
+    const fd = focusDate(), r = await api('/focus/' + fd, { method: 'POST', body: { minutes: m } });
+    if (fd === date) { data.memo.focus_min = r.focus_min; renderProgress(); }
+    notifyChange();
   } catch {}
 }
 function setMode(min) {
@@ -307,8 +368,8 @@ $('#tStart').onclick = () => {
       if (!timer.isBreak) {
         const rest = timer.total / 60 - (timer.credited || 0); // 일시정지 때 이미 기록한 만큼은 빼고
         if (rest > 0) {
-          const r = await api('/focus/' + date, { method: 'POST', body: { minutes: rest } });
-          data.memo.focus_min = r.focus_min; renderProgress();
+          const fd = focusDate(), r = await api('/focus/' + fd, { method: 'POST', body: { minutes: rest } });
+          if (fd === date) { data.memo.focus_min = r.focus_min; renderProgress(); }
         }
         const tid = +$('#timerTask').value;
         toast(tid ? '⏰ 집중 완료! 할 일을 끝냈다면 체크해 주세요' : '⏰ 집중 완료! 5분 쉬어가요', 3500);
@@ -331,7 +392,7 @@ function beep() {
   } catch {}
 }
 window.addEventListener('beforeunload', (e) => { if (timer.run) { e.preventDefault(); e.returnValue = ''; } });
-bindNoiseUI({ select: $('#noiseType'), vol: $('#noiseVol'), test: $('#noiseTest'), isRunning: () => timer.run && !timer.isBreak });
+mountNoiseUI($('#noiseBox'), { isRunning: () => timer.run && !timer.isBreak });
 
 // ───────── 테마 ─────────
 $('#lookBtn').onclick = (e) => {
@@ -344,12 +405,144 @@ $('#lookBtn').onclick = (e) => {
 document.addEventListener('click', (e) => { const path = e.composedPath(); if (!path.includes($('#lookPop')) && !path.includes($('#lookBtn'))) $('#lookPop').hidden = true; });
 
 // ───────── 이동 & 동기화 ─────────
-$('#jump').addEventListener('change', (e) => { if (e.target.value) location.href = `planner.html?date=${e.target.value}`; });
+$('#jump').addEventListener('change', (e) => { if (e.target.value) location.href = href(e.target.value); });
 onChange(() => load());
-setInterval(() => { if (date === D.today()) renderTimeline(); }, 60000);
+setInterval(() => { if (view === 'day' && date === D.today()) renderTimeline(); }, 60000);
+
+// ───────── 일주일 보기 ─────────
+// 학교·학원(시험) 일정 한 줄 요약 — 식사는 뺌
+const fixedLine = (d) => d.fixed.filter((b) => b.kind !== 'meal').map((b) => `${b.label} ${toHM(b.start)}–${toHM(b.end)}`).join(' · ');
+function renderWeek() {
+  const today = D.today();
+  const a = D.parse(wk.from), b = D.parse(wk.to);
+  document.title = `${a.getMonth() + 1}월 ${a.getDate()}일 주 · 플래너`;
+  $('#dateTitle').innerHTML = `${a.getMonth() + 1}월 ${a.getDate()}일 ~ ${a.getMonth() === b.getMonth() ? '' : `${b.getMonth() + 1}월 `}${b.getDate()}일<small>${a.getFullYear()}</small>`;
+  $('#prevDay').textContent = '‹ 이전 주'; $('#todayBtn').textContent = '이번 주'; $('#nextDay').textContent = '다음 주 ›';
+  $('#prevDay').href = href(D.add(wk.from, -7));
+  $('#nextDay').href = href(D.add(wk.from, 7));
+  $('#todayBtn').href = href(today);
+
+  $('#wk').innerHTML = wk.days.map((d, i) => {
+    const dow = D.dow(d.date), n = D.parse(d.date).getDate();
+    const cls = ['wd', dow === 0 && 'sun', dow === 6 && 'sat', d.date === today && 'today', d.date < today && 'past'].filter(Boolean).join(' ');
+    const stickers = data.exams.filter((e) => e.date === d.date)
+      .map((e) => `<span class="sticker" style="--c:${e.color}">${esc(examName(e, data.exams))} ${dday(D.diff(today, e.date))}</span>`).join('');
+    const fx = fixedLine(d);
+    const done = d.tasks.filter((t) => t.done).length;
+    const nextLabel = i === 6 ? '다음 주 일요일로 미루기' : '내일로 미루기';
+    const items = d.tasks.map((t) => `<li class="wt ${t.done ? 'done' : ''} ${t.id === focusId ? 'focus' : ''}" data-id="${t.id}">
+        <label class="check"><input type="checkbox" ${t.done ? 'checked' : ''} aria-label="완료"><span class="box"></span></label>
+        <div class="wbody">
+          <div class="wmeta"><span>${t.start != null ? `${toHM(t.start)}–${toHM(t.end)}` : '시간 자유'}</span>
+            <span class="chip" style="--c:${taskColor(t)}">${esc(taskName(t, '기타'))}</span></div>
+          <div class="wtitle">${esc(t.title)}</div>
+        </div>
+        <div class="wact">
+          <button data-act="focus" title="이 할 일로 집중 타이머 맞추기">⏱</button>
+          <button data-act="tomorrow" title="${nextLabel}">⏭</button>
+        </div></li>`).join('');
+    // 날짜를 누르면 하루 보기로 (전문가: 같은 창에서 이동 / 기본: 새 창)
+    return `<section class="${cls}" data-date="${d.date}">
+      <a class="wd-head" href="${href(d.date, 'day')}" ${Mode.basic ? 'target="_blank" rel="opener"' : ''} title="${D.pretty(d.date)} 하루 보기">
+        <span class="dn">${DAY_KO[dow]}</span><span class="num">${n}</span>${d.date === today ? '<span class="todaytag">오늘</span>' : ''}
+        <span class="go">${Mode.basic ? '자세히 ↗' : '하루 보기 ›'}</span></a>
+      ${stickers}
+      ${fx ? `<div class="fx" title="${esc(fx)}">${esc(fx)}</div>` : ''}
+      <ul class="wtodos">${items || `<li class="wempty">${d.planUntil && d.date > d.planUntil ? '가까워지면 계획이 만들어져요' : '할 일이 없어요'}</li>`}</ul>
+      ${d.tasks.length ? `<div class="wcount"><div class="bar"><i style="width:${Math.round((done / d.tasks.length) * 100)}%"></i></div>${done}/${d.tasks.length} 완료</div>` : ''}
+    </section>`;
+  }).join('');
+  const stats = weekStats();
+  $('#weekStats').innerHTML = `<h3 class="section-title"><span class="hl">과목별 이번 주</span></h3>` + (stats.length
+    ? `<div class="ws-grid">${stats.map((s) => `<div class="ws-row"><div class="top"><span>${esc(s.name)}</span>
+        <span class="muted">완료 ${fmtMin(s.done)} / 계획 ${fmtMin(s.plan)}</span></div>
+        <div class="bar"><i style="width:${s.plan ? Math.round((s.done / s.plan) * 100) : 0}%;--c:${s.color}"></i></div></div>`).join('')}</div>`
+    : '<p class="muted" style="font-size:13px">이번 주에 시간이 정해진 할 일이 없어요</p>');
+  renderTimerTasks();
+  renderWeekPrint(stats);
+}
+// 과목별 이번 주 계획 시간·완료 시간 (시간이 정해진 할 일 기준)
+function weekStats() {
+  const map = new Map();
+  for (const t of allTasks()) {
+    if (t.start == null) continue;
+    const key = t.exam_id ? 'e' + t.exam_id : 's' + (t.subject || '기타');
+    if (!map.has(key)) map.set(key, { name: taskName(t, '기타'), color: taskColor(t), plan: 0, done: 0 });
+    const s = map.get(key), m = t.end - t.start;
+    s.plan += m; if (t.done) s.done += m;
+  }
+  return [...map.values()].sort((a, b) => b.plan - a.plan);
+}
+$('#wk').addEventListener('change', (e) => { if (e.target.type === 'checkbox') toggle(+e.target.closest('.wt').dataset.id); });
+$('#wk').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  const id = +btn.closest('.wt').dataset.id, t = findTask(id);
+  if (!t) return;
+  if (btn.dataset.act === 'focus') {
+    setFocusTask(id);
+    $('.timer-card').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  } else if (btn.dataset.act === 'tomorrow') {
+    const to = D.add(t.date, 1); // 토요일이면 다음 주 일요일
+    try {
+      await api('/tasks/' + id, { method: 'PATCH', body: { date: to } });
+      toast(to > wk.to ? '다음 주 일요일 할 일로 옮겼어요' : `${DAY_KO[D.dow(to)]}요일 할 일로 옮겼어요`);
+      await changed();
+    } catch (err) { toast(err.message); }
+  }
+});
+
+// 일주일 인쇄: A4 가로 한 장
+function renderWeekPrint(stats) {
+  const today = D.today();
+  const a = D.parse(wk.from), b = D.parse(wk.to);
+  $('#weekPrint').innerHTML = `
+    <div class="pw-head">
+      <div class="pw-date">${a.getFullYear()}년 ${a.getMonth() + 1}월 ${a.getDate()}일 ~ ${b.getMonth() + 1}월 ${b.getDate()}일</div>
+      <div class="pw-dd">${data.exams.filter((e) => e.date >= today).slice(0, 8).map((e) => `<b>${esc(examName(e, data.exams))} ${dday(D.diff(today, e.date))}</b>`).join('')}</div>
+    </div>
+    <div class="pw-grid">${wk.days.map((d) => {
+      const dd = D.parse(d.date), ex = data.exams.filter((e) => e.date === d.date).map((e) => `★ ${esc(e.subject)} 시험`).join(' ');
+      const fx = fixedLine(d);
+      return `<div class="pw-day"><div class="pw-dh">${DAY_KO[dd.getDay()]} ${dd.getMonth() + 1}/${dd.getDate()}<span>${ex}</span></div>
+        ${fx ? `<div class="pw-fx">${esc(fx)}</div>` : ''}
+        ${d.tasks.map((t) => `<div class="pw-t ${t.done ? 'done' : ''}"><span class="pw-box ${t.done ? 'on' : ''}"></span>
+          <div><div class="pw-m"><b style="--c:${taskColor(t)}">${esc(taskName(t, '기타'))}</b> ${t.start != null ? `${toHM(t.start)}–${toHM(t.end)}` : ''}</div>
+          <div class="pw-title">${esc(t.title)}</div></div></div>`).join('') || '<div class="pw-none">할 일 없음</div>'}</div>`;
+    }).join('')}</div>
+    ${!Mode.basic && stats.length ? `<div class="pw-sum">과목별 이번 주 (완료/계획): ${stats.map((s) => `<b>${esc(s.name)} ${fmtMin(s.done)}/${fmtMin(s.plan)}</b>`).join('')}</div>` : ''}`;
+  fitPrint();
+}
+// 내용이 한 장(높이 186mm)을 넘으면 배율(--pz)을 줄임. 폭은 277mm/배율로 넓혀서 인쇄했을 때 가로를 꽉 채움
+function fitPrint() {
+  if (view !== 'week') return;
+  const sheet = $('#weekPrint'), limit = $('#printRuler').offsetHeight;
+  let z = 1;
+  for (let i = 0; i < 20; i++) {
+    sheet.style.setProperty('--pz', z.toFixed(3));
+    if (sheet.offsetHeight * z <= limit || z <= 0.4) break;
+    z *= 0.94;
+  }
+}
+window.addEventListener('beforeprint', fitPrint);
+if (document.fonts?.ready) document.fonts.ready.then(() => wk && fitPrint());
+// 인쇄 용지 방향: 하루 = A4 세로(기존), 일주일 = A4 가로
+function setPageSize(week) {
+  let st = document.getElementById('pageSize');
+  if (!st) { st = document.createElement('style'); st.id = 'pageSize'; document.head.appendChild(st); }
+  st.textContent = week ? '@media print { @page { size: A4 landscape; margin: 10mm; } }' : '';
+}
 
 // ───────── 처음 사용 안내 (이 기기에서 플래너를 처음 열 때 한 번) ─────────
+function weekTour() {
+  runTour([
+    { el: '#wk', title: '① 이번 주 할 일', text: '일요일부터 토요일까지 할 일이 한눈에 보여요. 끝낸 일은 <b>네모를 눌러 체크</b>하고, 못 한 일은 <b>⏭</b>로 내일로 미뤄요.' },
+    { el: '.timer-card', title: '② 집중 타이머', text: '할 일 옆의 <b>⏱</b>를 누르고 <b>▶ 시작</b>하면 25분 집중 타이머가 돌아가요. 끝나면 알림이 울려요.' },
+    { el: '#nextDay', title: '③ 다른 주 · 인쇄', text: '이전 주·다음 주로 넘기고, <b>🖨 인쇄</b>로 한 주를 종이 한 장에 뽑을 수 있어요. 하루를 자세히 보려면 <b>날짜</b>를 눌러요.' },
+  ], { doneLabel: '알겠어요' });
+}
 function plannerTour() {
+  if (view === 'week') return weekTour();
   if (Mode.basic) {
     return runTour([
       { el: '#todos', title: '오늘 할 일 체크', text: '끝낸 일은 네모를 눌러 체크해요. ⏭를 누르면 내일로 미룰 수 있어요.' },
@@ -370,5 +563,7 @@ $('#plHelp').onclick = plannerTour;
 load().then(async () => {
   drawTimer();
   if (await Plan.ensure()) await load();
-  if (!localStorage.getItem('sp_tour_planner')) { localStorage.setItem('sp_tour_planner', '1'); plannerTour(); }
+  // 처음 열 때 한 번: 기본 모드의 일주일 보기 안내 / 하루 보기 안내
+  const key = view === 'week' ? 'sp_tour_week' : 'sp_tour_planner';
+  if ((view === 'day' || Mode.basic) && !localStorage.getItem(key)) { localStorage.setItem(key, '1'); plannerTour(); }
 }).catch((e) => toast(e.message));

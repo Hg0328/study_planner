@@ -322,7 +322,7 @@ function beep() {
 }
 
 // ───────── 백색소음 (noise.js) — 달리는 동안 재생 ─────────
-bindNoiseUI({ select: $('#noiseType'), vol: $('#noiseVol'), test: $('#noiseTest'), isRunning: () => T.run });
+mountNoiseUI($('#noiseBox'), { isRunning: () => T.run, hint: '골라 두면 <b>공부 시작(달리기)</b>을 누를 때 자동으로 켜지고, 끝나거나 쉬면 꺼져요.' });
 
 // ───────── 캐릭터 꾸미기 ─────────
 const HAIR_COLORS = ['#2b1d16', '#3b2a20', '#6b4423', '#a0522d', '#d4a15a', '#f2d16b', '#c0392b', '#ff8fb1', '#8e44ad', '#2e86c1', '#e8e8e8'];
