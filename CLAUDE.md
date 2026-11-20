@@ -32,11 +32,10 @@ scopeParser.js   시험 범위 글 → [{subject,date,scope}] 규칙 기반 분�
 test/            npm test: scheduler·scopeParser·kinds(종류/우선순위/28일 생성) 단위 테스트, api.test.js(임시 DB로 서버 실행)
 public/
   index.html + calendar.js   첫 화면: 로그인, 월간 달력, D-Day/진행률, 설정 모달(시험·학교·학원·생활·꾸미기), 사용법 안내
-  planner.html + planner.js  하루 플래너(새 창): 타임테이블, 체크리스트, 집중 타이머, 회고, 인쇄
-  week.html + week.js        주간 플래너(새 창, 기본 모드 전용): 월~일 7일 체크리스트, 내일로 미루기, 집중 타이머, A4 가로 한 장 인쇄
+  planner.html + planner.js  플래너(새 창): [하루 | 일주일] 보기 — 하루(타임테이블, 체크리스트, 집중 타이머, 회고, 인쇄) / 일주일(일~토 체크리스트, 미루기, 과목별 이번 주 시간, A4 가로 인쇄)
   race.html + race.js        친구와 공부 마라톤(새 창, 8비트 스타일): 방/코드 입장, 트랙, 순위, 타이머
   pixel.js                   픽셀 캐릭터 캔버스 그리기 (run/drink/sleep/stand, 불꽃 0~3)
-  noise.js                   백색소음(Web Audio로 생성) — 플래너·마라톤 타이머 공용
+  noise.js                   백색소음 6종(Web Audio로 생성, 설계 값은 NOISE 상수) + mountNoiseUI(고르기·3초 미리듣기·슬라이더) — 플래너·마라톤 공용
   presets.js                 생활 유형·시험 종류(단계 이름·비율, 범위 단위, 추천 과목)·우선순위 — 서버(require)와 화면(window.Presets) 공용
   common.js                  api(), Auth(로그인 규칙), Mode(화면 모드), Plan.ensure()(이어 생성), examName()(과목 · 종류 표시), D(날짜), BroadcastChannel 동기화, toast, Look(테마), runTour(안내)
   style.css                  플래너 디자인 + 테마 변수 + 인쇄 + 안내 스타일
@@ -52,7 +51,7 @@ npm start                      # http://localhost:3000 , 로그에 "저장 위�
 PORT=3123 node server.js       # 다른 포트
 npm test                       # 단위 테스트 (node --test → test/*.test.js)
 ```
-- 테스트: Node 내장 `node:test` + `node:assert`만 사용합니다(추가 패키지 없음). `test/scheduler.test.js`(겹침·배정 비중·선호 요일·단계 순서·하루 한도), `test/scopeParser.test.js`(공지 형식·팁 제외·날짜/연도 추정·과목명 인식), `test/kinds.test.js`(종류별 단계·우선순위·장기 시험 최소 비중·28일/이어 생성 진도·성능), `test/api.test.js`(서버를 임시 DB·임의 포트로 띄워 API 흐름 확인), `test/migration.test.js`(서버를 다시 켜도 데이터 정리 마이그레이션이 한 번만 도는지), `test/basic.test.js`(모드 저장/조회, 기본 모드 설정으로 계획 생성, `/api/week` 7일 응답, 일요일 미루기 → 다음 주). 기능을 바꾸면 관련 테스트도 함께 고칩니다.
+- 테스트: Node 내장 `node:test` + `node:assert`만 사용합니다(추가 패키지 없음). `test/scheduler.test.js`(겹침·배정 비중·선호 요일·단계 순서·하루 한도), `test/scopeParser.test.js`(공지 형식·팁 제외·날짜/연도 추정·과목명 인식), `test/kinds.test.js`(종류별 단계·우선순위·장기 시험 최소 비중·28일/이어 생성 진도·성능), `test/api.test.js`(서버를 임시 DB·임의 포트로 띄워 API 흐름 확인), `test/migration.test.js`(서버를 다시 켜도 데이터 정리 마이그레이션이 한 번만 도는지), `test/basic.test.js`(모드·플래너 보기 저장/조회, 기본 모드 설정으로 계획 생성, `/api/week` 7일 응답, 토요일 미루기 → 다음 주 일요일), `test/snapshot.test.js`(설정을 안 건드린 계정의 계획 결과 해시 — 알고리즘·기본값을 일부러 바꿨을 때만 갱신). 기능을 바꾸면 관련 테스트도 함께 고칩니다.
 - Turso 모드로 API 테스트: `db.js`의 `@libsql/client/web`을 잠시 `@libsql/client`로 바꾸고 `SIM_TURSO=file:/tmp/sim.db node --test test/api.test.js` (확인 후 되돌리기).
 - 화면은 자동 테스트가 없습니다. 지금까지는 `curl`로 API 흐름(회원가입 → 시험 추가 → /api/generate → /api/day → 체크 → /api/stats)을, Playwright로 화면(로그인, 새 창 열기, 설정, 마라톤 2인 입장)을 확인했습니다.
 - Turso 모드 확인: `@libsql/client/web` 대신 같은 API의 `@libsql/client`를 `TURSO_DATABASE_URL=file:/tmp/sim.db`로 붙여 두 모드 결과가 같은지 비교했습니다.
@@ -64,7 +63,7 @@ npm test                       # 단위 테스트 (node --test → test/*.test.j
 3. Express 4는 async 오류를 못 잡으므로 라우트는 `h(async (req,res)=>…)`로 감쌉니다.
 4. 날짜는 클라이언트의 로컬 날짜 문자열(`YYYY-MM-DD`, 한국 시간)을 받아 씁니다. 서버의 `new Date()`로 "오늘"을 정하지 않습니다 (Render 서버는 UTC).
 5. 인증: HMAC 서명 토큰(12시간) + scrypt. 로그인 규칙은 `common.js`의 `Auth.checkVisit()` — 사이트를 새로 열면 다시 로그인, 같은 사이트 안에서 연 새 창(`referrer` 같은 출처)과 같은 탭 새로고침은 유지.
-6. 로그인 후 돌아갈 주소는 `SAFE_NEXT` 정규식에 있는 것만 허용 (오픈 리다이렉트 방지). `planner.html?date=`, `week.html?start=`, `race.html`.
+6. 로그인 후 돌아갈 주소는 `SAFE_NEXT` 정규식에 있는 것만 허용 (오픈 리다이렉트 방지). `planner.html?date=`(+`&view=day|week`), `race.html`.
 7. 계획 재생성(`/api/generate`)은 시작일 이후 **자동 생성 + 미완료** 할 일만 지우고 다시 만듭니다. 완료/직접 추가한 일정은 유지하고 그 시간은 피합니다. 설정 창을 닫을 때 바뀐 내용이 있으면 자동으로 호출됩니다(별도 생성 버튼 없음).
 8. 시험 범위 항목 구분자는 `; ` (자동 인식 결과). `scheduler.splitUnits`는 `;`가 있으면 그걸로, 없으면 쉼표로 나눕니다.
 9. 마라톤 거리 = 완료 체크한 공부(시간 있는 할 일) + 집중 타이머(`memos.focus_min`) + 달리는 중 실시간 경과(`runElapsedMin`). 타이머를 멈추면 그때까지의 분을 기록하고(`creditElapsed`), 완료 시 나머지만 기록해 중복이 없게 합니다.
@@ -83,8 +82,11 @@ npm test                       # 단위 테스트 (node --test → test/*.test.j
 17. **화면 모드**: `settings.mode` = `basic`(간단하게 설정할래요) | `expert`(다 설정할래요), 없으면 expert(기존 계정). `common.js`의 `Mode`가 `<html>`·`<body>`에 `mode-basic`/`mode-expert` 클래스를 붙입니다(이 기기 캐시 `sp_mode`, 서버 값이 기준).
     - 기본 모드에서 숨길 요소엔 `data-expert`, 기본 모드에만 보일 요소엔 `data-basic`을 붙입니다(`style.css`). **전문가 모드 화면은 바꾸지 않습니다** — 새 기능을 넣을 때 기본 모드에 보일지 먼저 정하세요.
     - 기본 모드 설정은 같은 설정 창을 단계로 보여 주는 것(`calendar.js`의 `STEPS`)이고, 숨긴 칸은 값이 그대로 저장됩니다. 생활 유형을 **바꿨을 때만** 숨긴 값(시험 당일 시간·이동 시간·하루 최대 공부량)을 그 유형 기본값으로 채웁니다(`applyLifeHidden`, 학교 시간표는 건드리지 않음).
-    - 주간 플래너는 계획 알고리즘을 건드리지 않고 `/api/week`(= `/api/day` 형태 × 7, `server.js`의 `dayPayloads` 공용)로 읽기만 합니다. 주의 시작은 월요일(`D.weekStart`). 집중 시간은 오늘 날짜의 `/api/focus`에 기록합니다. 전문가 모드에서 `week.html`을 열면 하루 플래너로 보냅니다.
-    - 주간 인쇄는 화면 밖 `#printSheet`(폭 277mm)의 높이를 재서 `--pz` 배율을 정합니다(`fitPrint`).
+18. **플래너 보기**: 별도 주간 페이지 없이 `planner.html` 안의 [하루 | 일주일] 보기. 주소 `?date=…&view=day|week`, view가 없으면 기본 모드 = 일주일, 전문가 모드 = `settings.plannerView`(마지막으로 본 보기, 탭·날짜 클릭·주소로 연 보기 모두 저장). 기본 모드는 탭을 숨기고(`data-expert`) 일주일 보기만 씁니다. 달력 날짜 링크는 `planner.html?date=` 하나뿐(진입점 늘리지 않기).
+    - 두 보기 모두 `/api/week`(= `/api/day` 형태 × 7, `server.js`의 `dayPayloads` 공용) 한 번으로 읽습니다. 계획 알고리즘은 건드리지 않습니다. **주의 시작은 일요일**(`D.weekStart`, 달력과 같음) — 토요일 할 일을 미루면 다음 주 일요일로.
+    - 집중 타이머 카드는 하나이고 보기에 따라 자리만 옮깁니다. 집중 시간은 하루 보기 = 그 날짜, 일주일 보기 = 오늘 날짜의 `/api/focus`에 기록합니다.
+    - 일주일 인쇄는 화면 밖 `#weekPrint`(폭 277mm)의 높이를 재서 `--pz` 배율을 정하고(`fitPrint`), 그때만 `@page`를 A4 가로로 바꿉니다(`setPageSize`). 하루 인쇄는 기존 A4 세로.
+19. **백색소음**(`noise.js`): 소리 파일 없이 6초 잡음 버퍼(화이트·핑크·브라운) + 필터 + 음량 자동화 + 짧은 "톡" 소리로 만듭니다. 무작위 소리는 2.5초 앞까지 미리 예약(`LOOKAHEAD`)해서 탭이 뒤로 가도 끊기지 않습니다. 소리를 바꾸거나 끌 때는 항상 크로스페이드(`fade`) — `src.stop()`을 바로 부르지 않습니다. 저장 키 `sp_noise` = `{type, vol, tone, rain}`, 예전 `white|pink|brown`은 `base` + tone 0/0.5/1로 읽습니다.
 
 ## 환경 변수
 `PORT`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `DB_PATH`, `JWT_SECRET`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`(기본 claude-sonnet-5-5), `AI_DAILY_LIMIT`(기본 20).
@@ -103,6 +105,7 @@ npm test                       # 단위 테스트 (node --test → test/*.test.j
 - [x] API 흐름 자동 테스트 일부 (`test/api.test.js`: 시험 종류·28일/이어 생성·완료 후 재생성·통계, 2026-11-14)
 - [x] 시험 조합 지원: 생활 유형·시험 종류·우선순위·장기 시험 최소 비중·28일 생성 (2026-11-14)
 - [x] 기본 모드("간단하게 설정할래요"): 단계형 설정·주간 플래너·숨김 처리 (2026-11-17)
-- [ ] 사용자 확인 필요(기본 모드): 주의 시작 요일 = 월요일(달력은 일요일 시작이라 일요일 칸을 누르면 그 전 월요일 주가 열림), 기본 모드에서 시험 종류·우선순위도 숨김, 달력 칸의 하루 달성률 막대·도장은 유지
+- [x] 플래너 [하루 | 일주일] 보기 두 모드 공용, 주 시작 일요일, 백색소음 6종·미리듣기 (2026-11-20)
+- [ ] 사용자 선택 대기: 전문가 모드 "고급" 탭 후보 8개 중 구현할 항목 (이동 시간 전/후, 쉬는 시간, D-1·D-2 배율, 단계 비율, 마지막 복습 블록, 요일별 기상·취침, 과목별 하루 최대 블록, RAMP — RAMP는 현재 코드에 없음)
 - [ ] 사용자 피드백 대기: 생활 유형 기본 시간표(대학생 10~15시 5h/8h, 직장인 9~18시 이동 60분 2h/5h 등), 장기 시험 기준 60일·최소 20%
 - [ ] 사용자 피드백 대기 중인 기준값: 잠자기 전환 20분, 불꽃 1·2·4시간, 방 최대 10명, 폴링 5초
